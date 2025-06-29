@@ -2,7 +2,13 @@ import streamlit as st
 import pandas as pd
 from io import StringIO
 from datetime import datetime
-from da_algorithm import da_match, greedy_match
+import sys
+import os
+
+# プロジェクトルートをパスに追加
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from algorithms import da_match, greedy_match, multi_slot_da_match
 
 # ---------- 共通定義 ----------
 HOURS = list(range(9, 18))                      # 9:00〜17:00
@@ -49,8 +55,8 @@ point_unit = st.sidebar.number_input(
 st.sidebar.header("3️⃣ マッチングアルゴリズム選択")
 algorithm_choice = st.sidebar.selectbox(
     "使用するアルゴリズム",
-    ["DAアルゴリズム (推奨)", "貪欲アルゴリズム"],
-    help="DAアルゴリズムは安定マッチングを保証し、より公平な割り当てを行います"
+    ["Multi-slot DAアルゴリズム (推奨)", "DAアルゴリズム", "貪欲アルゴリズム"],
+    help="Multi-slot DAアルゴリズムは日次スロットベースでより柔軟な割り当てを行います"
 )
 
 # ---------- オペレータ入力 ----------
@@ -90,12 +96,33 @@ def calc_points(sched_df: pd.DataFrame, ops: list, unit: int):
 # ---------- 実行ボタン ----------
 if st.button("🛠️  Match & Generate Schedule"):
     # 選択されたアルゴリズムでマッチング
-    if algorithm_choice == "DAアルゴリズム (推奨)":
-        # 型エラーを回避するため、DataFrameを明示的に作成
+    if algorithm_choice == "Multi-slot DAアルゴリズム (推奨)":
+        # Multi-slot DAアルゴリズムを使用
+        assignments, schedule = multi_slot_da_match(req_df.copy(), ops_data)
+        algorithm_name = "Multi-slot DAアルゴリズム"
+        
+        # 割り当て結果の詳細表示
+        st.subheader("📋 詳細割り当て結果")
+        assignment_data = []
+        for assignment in assignments:
+            assignment_data.append({
+                "オペレータ": assignment.operator_name,
+                "デスク": assignment.desk_name,
+                "スロット": assignment.slot_id,
+                "日付": assignment.date.strftime("%Y-%m-%d"),
+                "タイプ": assignment.assignment_type
+            })
+        
+        if assignment_data:
+            assignment_df = pd.DataFrame(assignment_data)
+            st.dataframe(assignment_df, use_container_width=True)
+        
+    elif algorithm_choice == "DAアルゴリズム":
+        # 従来のDAアルゴリズムを使用
         schedule = da_match(req_df.copy(), ops_data)
         algorithm_name = "DAアルゴリズム"
     else:
-        # 型エラーを回避するため、DataFrameを明示的に作成
+        # 貪欲アルゴリズムを使用
         schedule = greedy_match(req_df.copy(), ops_data)
         algorithm_name = "貪欲アルゴリズム"
 
