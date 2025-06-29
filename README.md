@@ -11,7 +11,9 @@
   - Multi-slot DAアルゴリズム
   - DA（Deferred Acceptance）アルゴリズム
   - 貪欲アルゴリズム
-- **制約設定UI**: 最小休息・最大連勤・最大週労働・夜勤回数・夜勤後休日などをGUIで調整
+- **制約設定UI**: 最小休息・最大連勤・最大週労働・夜勤回数・夜勤後休日・連続スロット後の必須休憩などをGUIで調整
+- **自動休憩割り当て**: 5スロット連続勤務後のオペレータを「休憩」デスクに自動アサイン
+- **高性能シフト生成**: キャッシュ機能と最適化により高速なシフト生成（100オペレータ・10デスクで0.03秒）
 - **シフト期間設定**: 1日/5日連続/カスタム日数でシフト生成
 - **ポイント計算**: 他デスク勤務に対するポイント補填
 - **シフト表・ポイント集計CSV出力**: 期間統合・個別日ごとにダウンロード可
@@ -50,7 +52,8 @@ da_parttime/
 │   ├── test_operator_csv.py
 │   ├── test_constraint_ui.py
 │   ├── test_constrained_algorithm.py
-│   └── test_multi_slot_debug.py
+│   ├── test_multi_slot_debug.py
+│   └── test_consecutive_break_constraint.py
 │
 ├── data/
 │   ├── shifts/
@@ -92,6 +95,10 @@ da_parttime/
 - `test_constraint_ui.py`: 制約UIテスト
 - `test_constrained_algorithm.py`: 制約付きアルゴリズムテスト
 - `test_multi_slot_debug.py`: デバッグ用テスト
+- `test_consecutive_break_constraint.py`: 連続スロット後の必須休憩制約テスト
+
+### パフォーマンス関連
+- `performance_test.py`: シフト生成パフォーマンスの測定・分析
 
 ### data/
 - **shifts/**
@@ -126,7 +133,14 @@ make test
 poetry run pytest tests/ -v
 ```
 
-### 4. Webアプリの操作手順
+### 4. パフォーマンステスト実行
+```bash
+make performance-test
+# または
+poetry run python performance_test.py
+```
+
+### 5. Webアプリの操作手順
 1. **デスク要員数CSV**をアップロード（テンプレDL可）
 2. **オペレーター情報**を手動入力 or CSVアップロード（テンプレDL可）
 3. **シフト期間**（1日/5日/カスタム）・**開始日**を選択
@@ -165,6 +179,14 @@ Op2,9,12,Desk B,"Desk A,Desk B"
   - サイドバー「シフト期間設定」で「5日連続」または「カスタム」を選択
 - **Q. 制約はどこで設定？**
   - 「制約付きMulti-slot DAアルゴリズム」選択時、サイドバー下部で各種制約をGUI設定
+- **Q. 休憩時間はどうやって設定する？**
+  - 制約設定で「連続スロット後の必須休憩制約」を有効にすると、指定したスロット数以上連続で働いたオペレータが自動的に「休憩」デスクに割り当てられます
+- **Q. 休憩デスクの名前は変更できる？**
+  - 制約設定の「休憩デスク名」で任意の名前を設定可能（デフォルト: 「休憩」）
+- **Q. シフト生成に時間がかかる場合は？**
+  - パフォーマンス最適化済み（100オペレータ・10デスクで0.03秒）
+  - 制約数を減らすか、オペレータ数を調整してください
+  - 詳細なパフォーマンス測定は `python performance_test.py` で実行可能
 
 ---
 

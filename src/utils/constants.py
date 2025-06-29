@@ -11,6 +11,10 @@ COLS = ["desk"] + [f"h{h:02d}" for h in HOURS]
 # デフォルトデスク設定
 DEFAULT_DESKS = [f"Desk {c}" for c in "ABCDE"]
 
+# 休憩デスク設定
+BREAK_DESK_NAME = "休憩"
+MAX_CONSECUTIVE_SLOTS_BEFORE_BREAK = 5  # 5スロット連続勤務後に休憩必須
+
 # アルゴリズム選択肢
 ALGORITHM_CHOICES = [
     "制約付きMulti-slot DAアルゴリズム (推奨)",
@@ -38,10 +42,13 @@ DEFAULT_CONSTRAINTS = {
     "required_day_off_after_night": True,
     "long_shift_threshold_hours": 5.0,
     "required_break_hours": 1.0,
+    "max_consecutive_slots": 5,
+    "break_desk_name": "休憩",
     "enable_min_rest": True,
     "enable_consecutive": True,
     "enable_weekly_hours": True,
     "enable_night_shifts": True,
     "enable_day_off_after_night": True,
-    "enable_break_after_long_shift": True
+    "enable_break_after_long_shift": True,
+    "enable_break_after_consecutive_slots": True
 } 

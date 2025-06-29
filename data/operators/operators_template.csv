@@ -1,6 +1,0 @@
-name,start,end,home,desks
-Op1,9,12,Desk A,"Desk A,Desk B"
-Op2,9,12,Desk B,"Desk A,Desk B"
-Op3,10,15,Desk C,"Desk C,Desk D"
-Op4,11,16,Desk D,"Desk C,Desk D"
-Op5,9,17,Desk A,"Desk A,Desk B,Desk C" 

@@ -45,10 +45,61 @@ def setup_desk_requirements_section():
     st.sidebar.download_button("テンプレートDL", buf.getvalue(),
                                file_name="desk_template.csv", mime="text/csv")
 
+    # デフォルトファイルの存在確認
+    default_shift_files = [
+        "data/shifts/シフト表.csv",
+        "data/shifts/名称未設定.csv"
+    ]
+    
+    available_default_files = []
+    for file_path in default_shift_files:
+        if os.path.exists(file_path):
+            available_default_files.append(file_path)
+    
+    # デフォルトファイルの選択オプション
+    if available_default_files:
+        st.sidebar.subheader("📁 デフォルトファイル選択")
+        st.sidebar.info("💡 推奨: data/shifts フォルダ内のファイルを選択してください")
+        
+        default_file_choice = st.sidebar.selectbox(
+            "デフォルトファイルを選択",
+            ["ファイルを選択してください"] + [os.path.basename(f) for f in available_default_files],
+            help="data/shiftsフォルダ内の既存ファイルを選択するか、新しいファイルをアップロードしてください"
+        )
+        
+        # デフォルトファイルが選択された場合
+        if default_file_choice != "ファイルを選択してください":
+            selected_file_path = available_default_files[
+                [os.path.basename(f) for f in available_default_files].index(default_file_choice)
+            ]
+            try:
+                req_df = pd.read_csv(selected_file_path)
+                if miss := set(COLS) - set(req_df.columns):
+                    st.error(f"列不足: {miss}")
+                    st.info("テンプレートをダウンロードして正しい形式でアップロードしてください")
+                    st.stop()
+                req_df = req_df[COLS].fillna(0).astype({"desk": str, **{c: int for c in COLS[1:]}})
+                st.success(f"✅ デフォルトファイル読み込み完了: {os.path.basename(selected_file_path)}")
+                
+                # デスクリストを取得
+                desks = req_df["desk"].tolist()
+                
+                st.subheader("📝 デスク要員数プレビュー")
+                st.dataframe(req_df, use_container_width=True)
+                
+                return req_df, desks
+                
+            except Exception as e:
+                st.error(f"デフォルトファイル読み込みエラー: {str(e)}")
+                st.info("ファイル形式を確認するか、新しいファイルをアップロードしてください")
+
     # ファイルアップロード
+    st.sidebar.subheader("📤 新しいファイルアップロード")
+    st.sidebar.info("💡 推奨: data/shifts フォルダ内のファイルを選択してください")
+    
     try:
         up_file = st.sidebar.file_uploader("CSV をアップロード", type="csv", 
-                                          help="CSVファイルをアップロードするか、手動入力を使用してください")
+                                          help="data/shiftsフォルダ内のCSVファイルをアップロードするか、手動入力を使用してください")
     except Exception as e:
         st.sidebar.error(f"ファイルアップロードエラー: {str(e)}")
         up_file = None
@@ -102,12 +153,73 @@ def setup_operator_section(desks):
         mime="text/csv"
     )
 
+    # デフォルトファイルの存在確認
+    default_operator_files = [
+        "data/operators/operators_default.csv",
+        "data/operators/operators_template.csv"
+    ]
+    
+    available_default_operator_files = []
+    for file_path in default_operator_files:
+        if os.path.exists(file_path):
+            available_default_operator_files.append(file_path)
+    
+    # デフォルトファイルの選択オプション
+    if available_default_operator_files:
+        st.sidebar.subheader("📁 デフォルトオペレーターファイル選択")
+        st.sidebar.info("💡 推奨: data/operators フォルダ内のファイルを選択してください")
+        
+        default_operator_file_choice = st.sidebar.selectbox(
+            "デフォルトオペレーターファイルを選択",
+            ["ファイルを選択してください"] + [os.path.basename(f) for f in available_default_operator_files],
+            help="data/operatorsフォルダ内の既存ファイルを選択するか、新しいファイルをアップロードしてください"
+        )
+        
+        # デフォルトファイルが選択された場合
+        if default_operator_file_choice != "ファイルを選択してください":
+            selected_operator_file_path = available_default_operator_files[
+                [os.path.basename(f) for f in available_default_operator_files].index(default_operator_file_choice)
+            ]
+            try:
+                operators_df = pd.read_csv(selected_operator_file_path)
+                
+                # 必要な列の存在チェック
+                required_columns = ["name", "start", "end", "home", "desks"]
+                missing_columns = [col for col in required_columns if col not in operators_df.columns]
+                
+                if missing_columns:
+                    st.sidebar.error(f"必要な列が不足しています: {missing_columns}")
+                    st.sidebar.info("テンプレートをダウンロードして正しい形式でアップロードしてください")
+                    st.stop()
+                
+                # データの検証と変換
+                ops_data, errors = validate_operators_csv(operators_df, desks)
+                
+                # エラーメッセージの表示
+                for error in errors:
+                    st.sidebar.warning(error)
+                
+                if ops_data:
+                    st.sidebar.success(f"✅ デフォルトオペレーターファイル読み込み完了: {os.path.basename(selected_operator_file_path)} ({len(ops_data)}人)")
+                    display_operator_preview(ops_data)
+                    return ops_data
+                else:
+                    st.sidebar.error("❌ 有効なオペレーターデータがありません")
+                    st.stop()
+                    
+            except Exception as e:
+                st.sidebar.error(f"デフォルトオペレーターファイル読み込みエラー: {str(e)}")
+                st.sidebar.info("ファイル形式を確認するか、新しいファイルをアップロードしてください")
+
     # オペレーターCSVファイルアップロード
+    st.sidebar.subheader("📤 新しいオペレーターファイルアップロード")
+    st.sidebar.info("💡 推奨: data/operators フォルダ内のファイルを選択してください")
+    
     try:
         operators_file = st.sidebar.file_uploader(
             "オペレーターCSVをアップロード", 
             type="csv",
-            help="オペレーター情報のCSVファイルをアップロードするか、手動入力を使用してください"
+            help="data/operatorsフォルダ内のオペレーター情報CSVファイルをアップロードするか、手動入力を使用してください"
         )
     except Exception as e:
         st.sidebar.error(f"オペレーターファイルアップロードエラー: {str(e)}")

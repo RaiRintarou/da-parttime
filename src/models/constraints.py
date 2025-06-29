@@ -23,6 +23,7 @@ class ConstraintType(Enum):
     MAX_NIGHT_SHIFTS_PER_WEEK = "max_night_shifts_per_week"  # 週間最大夜勤数
     REQUIRED_DAY_OFF_AFTER_NIGHT = "required_day_off_after_night"  # 夜勤後の必須休日
     REQUIRED_BREAK_AFTER_LONG_SHIFT = "required_break_after_long_shift"  # 長時間シフト後の必須休憩
+    REQUIRED_BREAK_AFTER_CONSECUTIVE_SLOTS = "required_break_after_consecutive_slots"  # 連続スロット後の必須休憩
     SKILL_REQUIREMENT = "skill_requirement"     # スキル要件
     PREFERRED_SHIFT_PATTERN = "preferred_shift_pattern"  # 好ましいシフトパターン
 
@@ -322,60 +323,6 @@ class RequiredBreakAfterLongShiftConstraint(Constraint):
         
         return break_hours
     
-    def get_required_break_slots(self, assignments: List['Assignment'], operators: List['OperatorAvailability']) -> List[Dict[str, Any]]:
-        """必要な休憩スロットを取得"""
-        from .multi_slot_models import Assignment
-        
-        # 1時間単位のスロットの時間定義
-        slot_hours = {f"h{hour:02d}": 1.0 for hour in range(9, 18)}
-        
-        break_slots = []
-        
-        for operator in operators:
-            op_assignments = [a for a in assignments if a.operator_name == operator.operator_name]
-            if not op_assignments:
-                continue
-            
-            # 日付順にソート
-            op_assignments.sort(key=lambda x: x.date)
-            
-            for i, assignment in enumerate(op_assignments):
-                current_hours = slot_hours.get(assignment.slot_id, 0.0)
-                
-                # 現在のシフトが長時間シフトの場合
-                if current_hours >= self.long_shift_threshold_hours:
-                    # 同日の後続シフトをチェック
-                    same_day_assignments = [a for a in op_assignments if a.date == assignment.date]
-                    current_index = same_day_assignments.index(assignment)
-                    
-                    # 後続のシフトがある場合、休憩スロットを追加
-                    if current_index < len(same_day_assignments) - 1:
-                        next_assignment = same_day_assignments[current_index + 1]
-                        break_slots.append({
-                            'operator_name': operator.operator_name,
-                            'date': assignment.date,
-                            'break_start': self._get_break_start_time(assignment),
-                            'break_end': self._get_break_end_time(next_assignment),
-                            'duration_hours': self.required_break_hours,
-                            'reason': f"連続稼働{current_hours}時間後の必須休憩"
-                        })
-        
-        return break_slots
-    
-    def _get_break_start_time(self, assignment: 'Assignment') -> str:
-        """休憩開始時刻を取得"""
-        if assignment.slot_id.startswith('h'):
-            hour = int(assignment.slot_id[1:])
-            return f"{hour+1:02d}:00"
-        return "17:00"
-    
-    def _get_break_end_time(self, assignment: 'Assignment') -> str:
-        """休憩終了時刻を取得"""
-        if assignment.slot_id.startswith('h'):
-            hour = int(assignment.slot_id[1:])
-            return f"{hour:02d}:00"
-        return "09:00"
-
     def get_break_assignments(self, assignments: List['Assignment'], operators: List['OperatorAvailability']) -> List[Dict[str, Any]]:
         """必要な休憩割り当てを取得（既存の時間帯に割り当て）"""
         from .multi_slot_models import Assignment
@@ -444,6 +391,150 @@ class RequiredBreakAfterLongShiftConstraint(Constraint):
         
         return break_hour
 
+@dataclass
+class RequiredBreakAfterConsecutiveSlotsConstraint(Constraint):
+    """
+    連続スロット後の必須休憩制約
+    
+    指定されたスロット数以上連続で働いた場合、次のスロットで休憩を必須とする制約。
+    休憩アサイン後は連続カウントが0にリセットされ、再度デスクにアサイン可能な状態になります。
+    
+    Attributes:
+        max_consecutive_slots (int): 最大連続スロット数（この数以上連続勤務すると休憩必須）
+        break_desk_name (str): 休憩デスク名（休憩時に割り当てられるデスク名）
+    """
+    max_consecutive_slots: int = 5  # 最大連続スロット数
+    break_desk_name: str = "休憩"   # 休憩デスク名
+    
+    def __init__(self, max_consecutive_slots: int = 5, break_desk_name: str = "休憩", **kwargs):
+        super().__init__(ConstraintType.REQUIRED_BREAK_AFTER_CONSECUTIVE_SLOTS,
+                        f"連続{max_consecutive_slots}スロット後の{break_desk_name}必須", **kwargs)
+        self.max_consecutive_slots = max_consecutive_slots
+        self.break_desk_name = break_desk_name
+    
+    def validate(self, assignments: List['Assignment'], operators: List['OperatorAvailability']) -> bool:
+        """
+        連続スロット後の必須休憩制約の検証（最適化版）
+        
+        各オペレータの割り当てを時系列順にチェックし、連続スロット数が上限に達した場合、
+        次のスロットで休憩デスクにアサインされているかを検証します。
+        
+        休憩デスクにアサインされた後は連続カウントが0にリセットされ、
+        再度通常のデスクにアサイン可能な状態になります。
+        
+        Args:
+            assignments: 割り当てリスト
+            operators: オペレータ利用可能性リスト
+            
+        Returns:
+            bool: 制約を満たしている場合はTrue、違反している場合はFalse
+        """
+        from .multi_slot_models import Assignment
+        
+        # オペレータ別に割り当てをグループ化（一度だけ実行）
+        operator_assignments = {}
+        for assignment in assignments:
+            if assignment.operator_name not in operator_assignments:
+                operator_assignments[assignment.operator_name] = []
+            operator_assignments[assignment.operator_name].append(assignment)
+        
+        for operator in operators:
+            op_assignments = operator_assignments.get(operator.operator_name, [])
+            if not op_assignments:
+                continue
+            
+            # 日付とスロット順にソート（一度だけ実行）
+            op_assignments.sort(key=lambda x: (x.date, x.slot_id))
+            
+            consecutive_count = 0
+            for i, assignment in enumerate(op_assignments):
+                # 休憩デスクの場合は連続カウントをリセット
+                # これにより、休憩後は再度デスクにアサイン可能な状態になります
+                if assignment.desk_name == self.break_desk_name:
+                    consecutive_count = 0
+                    continue
+                
+                # 通常のデスクの場合は連続カウントを増加
+                consecutive_count += 1
+                
+                # 連続スロット数が上限に達した場合、次のスロットで休憩が必要
+                if consecutive_count >= self.max_consecutive_slots:
+                    # 次のスロットがあるかチェック
+                    if i + 1 < len(op_assignments):
+                        next_assignment = op_assignments[i + 1]
+                        # 次のスロットが休憩デスクでない場合は制約違反
+                        if next_assignment.desk_name != self.break_desk_name:
+                            return False  # 早期終了
+                    consecutive_count = 0  # 休憩後はリセット
+        
+        return True
+    
+    def get_required_break_assignments(self, assignments: List['Assignment'], 
+                                     operators: List['OperatorAvailability']) -> List[Dict[str, Any]]:
+        """
+        必要な休憩割り当てを取得
+        
+        連続スロット数が上限に達した場合、次のスロットに休憩割り当てを生成します。
+        休憩アサイン後は連続カウントが0にリセットされ、再度デスクにアサイン可能な状態になります。
+        
+        Args:
+            assignments: 現在の割り当てリスト
+            operators: オペレータ利用可能性リスト
+            
+        Returns:
+            List[Dict[str, Any]]: 必要な休憩割り当てのリスト
+        """
+        from .multi_slot_models import Assignment
+        
+        break_assignments = []
+        
+        # 利用可能なスロットを定義（9時から17時まで）
+        available_slots = [f"h{hour:02d}" for hour in range(9, 18)]
+        
+        for operator in operators:
+            op_assignments = [a for a in assignments if a.operator_name == operator.operator_name]
+            if not op_assignments:
+                continue
+            
+            # 日付とスロット順にソート
+            op_assignments.sort(key=lambda x: (x.date, x.slot_id))
+            
+            consecutive_count = 0
+            for i, assignment in enumerate(op_assignments):
+                # 休憩デスクの場合は連続カウントをリセット
+                # これにより、休憩後は再度デスクにアサイン可能な状態になります
+                if assignment.desk_name == self.break_desk_name:
+                    consecutive_count = 0
+                    continue
+                
+                # 通常のデスクの場合は連続カウントを増加
+                consecutive_count += 1
+                
+                # 連続スロット数が上限に達した場合、次のスロットで休憩が必要
+                if consecutive_count >= self.max_consecutive_slots:
+                    # 現在のスロットの次のスロットを計算
+                    current_slot_index = available_slots.index(assignment.slot_id)
+                    if current_slot_index + 1 < len(available_slots):
+                        next_slot_id = available_slots[current_slot_index + 1]
+                        
+                        # 次のスロットに既に割り当てがあるかチェック
+                        next_slot_assignment = next((a for a in op_assignments 
+                                                   if a.slot_id == next_slot_id and a.date == assignment.date), None)
+                        
+                        # 次のスロットに割り当てがない場合、または休憩デスクでない場合は休憩割り当てを追加
+                        if not next_slot_assignment or next_slot_assignment.desk_name != self.break_desk_name:
+                            break_assignments.append({
+                                'operator_name': operator.operator_name,
+                                'date': assignment.date,
+                                'slot_id': next_slot_id,
+                                'desk_name': self.break_desk_name,
+                                'reason': f"連続{consecutive_count}スロット後の必須休憩"
+                            })
+                    
+                    consecutive_count = 0  # 休憩後はリセット
+        
+        return break_assignments
+
 class ConstraintParser:
     """制約DSLパーサー"""
     
@@ -468,6 +559,7 @@ class ConstraintParser:
             (r'max_night_shifts_per_week\s*=\s*(\d+)', self._parse_max_night_shifts),
             (r'required_day_off_after_night\s*=\s*true', self._parse_required_day_off_after_night),
             (r'required_break_after_long_shift\s*=\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)', self._parse_required_break_after_long_shift),
+            (r'required_break_after_consecutive_slots\s*=\s*(\d+)', self._parse_required_break_after_consecutive_slots),
         ]
         
         for pattern, parser_func in patterns:
@@ -508,30 +600,54 @@ class ConstraintParser:
             required_break_hours=break_hours
         )
 
+    def _parse_required_break_after_consecutive_slots(self, match) -> Constraint:
+        """連続スロット後の必須休憩制約をパース"""
+        slots = int(match.group(1))
+        return RequiredBreakAfterConsecutiveSlotsConstraint(max_consecutive_slots=slots)
+
 class ConstraintValidator:
     """制約バリデーター"""
     
     def __init__(self, constraints: List[Constraint]):
         self.constraints = constraints
+        self._validation_cache = {}  # 検証結果のキャッシュ
+    
+    def _get_cache_key(self, assignments: List['Assignment']) -> str:
+        """キャッシュキーを生成"""
+        # 割り当てのハッシュを生成（日付、スロットID、オペレータ名、デスク名）
+        assignment_hash = hash(tuple((a.date, a.slot_id, a.operator_name, a.desk_name) for a in assignments))
+        return str(assignment_hash)
     
     def validate_all(self, assignments: List['Assignment'], operators: List['OperatorAvailability']) -> Dict[str, bool]:
-        """全ての制約を検証"""
+        """全ての制約を検証（キャッシュ付き）"""
+        cache_key = self._get_cache_key(assignments)
+        
+        if cache_key in self._validation_cache:
+            return self._validation_cache[cache_key]
+        
         results = {}
         
         for constraint in self.constraints:
             constraint_name = constraint.constraint_type.value
             results[constraint_name] = constraint.validate(assignments, operators)
         
+        # キャッシュに保存
+        self._validation_cache[cache_key] = results
+        
         return results
     
     def get_violations(self, assignments: List['Assignment'], operators: List['OperatorAvailability']) -> List[str]:
-        """違反している制約のリストを取得"""
+        """違反している制約のリストを取得（早期終了付き）"""
         violations = []
         validation_results = self.validate_all(assignments, operators)
         
         for constraint_name, is_valid in validation_results.items():
             if not is_valid:
                 violations.append(constraint_name)
+                # 早期終了: ハード制約の違反が見つかった場合は即座に終了
+                constraint = next((c for c in self.constraints if c.constraint_type.value == constraint_name), None)
+                if constraint and constraint.is_hard:
+                    break
         
         return violations
     
@@ -543,6 +659,10 @@ class ConstraintValidator:
             total_score += constraint.get_violation_score(assignments, operators)
         
         return total_score
+    
+    def clear_cache(self):
+        """キャッシュをクリア"""
+        self._validation_cache.clear()
 
 # デフォルト制約セット
 def create_default_constraints() -> List[Constraint]:
@@ -554,6 +674,7 @@ def create_default_constraints() -> List[Constraint]:
         MaxNightShiftsPerWeekConstraint(max_night_shifts_per_week=2),
         RequiredDayOffAfterNightConstraint(),
         RequiredBreakAfterLongShiftConstraint(long_shift_threshold_hours=5.0, required_break_hours=1.0),
+        RequiredBreakAfterConsecutiveSlotsConstraint(max_consecutive_slots=5, break_desk_name="休憩"),
     ]
 
 # 制約DSLのサンプル

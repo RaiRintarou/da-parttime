@@ -48,3 +48,6 @@ format:
 	@echo "🎨 コードをフォーマット中..."
 	poetry run black src/ --line-length=88
 	poetry run isort src/ --profile=black
+
+performance-test:
+	poetry run python performance_test.py

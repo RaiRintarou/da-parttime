@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 from models.constraints import (
     create_default_constraints, MinRestHoursConstraint, MaxConsecutiveDaysConstraint,
     MaxWeeklyHoursConstraint, MaxNightShiftsPerWeekConstraint, RequiredDayOffAfterNightConstraint,
-    RequiredBreakAfterLongShiftConstraint
+    RequiredBreakAfterLongShiftConstraint, RequiredBreakAfterConsecutiveSlotsConstraint
 )
 
 from .constants import DEFAULT_CONSTRAINTS
@@ -135,6 +135,25 @@ class ConstraintManager:
             
             st.info(f"💡 連続稼働{self.constraints_config['long_shift_threshold_hours']}時間以上の場合、{self.constraints_config['required_break_hours']}時間の休憩が必須となります")
             
+            # 連続スロット後の必須休憩制約設定
+            st.subheader("🔄 連続スロット後の必須休憩制約")
+            self.constraints_config["max_consecutive_slots"] = st.slider(
+                "最大連続スロット数",
+                min_value=3,
+                max_value=8,
+                value=self.constraints_config.get("max_consecutive_slots", 5),
+                step=1,
+                help="このスロット数以上連続で働いた場合、次のスロットで休憩が必須"
+            )
+            
+            self.constraints_config["break_desk_name"] = st.text_input(
+                "休憩デスク名",
+                value=self.constraints_config.get("break_desk_name", "休憩"),
+                help="休憩時に割り当てられるデスク名"
+            )
+            
+            st.info(f"💡 連続{self.constraints_config['max_consecutive_slots']}スロット以上の場合、次のスロットで{self.constraints_config['break_desk_name']}が必須となります")
+            
             # 制約の有効/無効設定
             st.subheader("⚙️ 制約の有効/無効")
             self.constraints_config["enable_min_rest"] = st.checkbox("最小休息時間制約を有効にする", value=self.constraints_config["enable_min_rest"])
@@ -143,6 +162,7 @@ class ConstraintManager:
             self.constraints_config["enable_night_shifts"] = st.checkbox("週間最大夜勤数制約を有効にする", value=self.constraints_config["enable_night_shifts"])
             self.constraints_config["enable_day_off_after_night"] = st.checkbox("夜勤後の必須休日制約を有効にする", value=self.constraints_config["enable_day_off_after_night"])
             self.constraints_config["enable_break_after_long_shift"] = st.checkbox("長時間シフト後の必須休憩制約を有効にする", value=self.constraints_config["enable_break_after_long_shift"])
+            self.constraints_config["enable_break_after_consecutive_slots"] = st.checkbox("連続スロット後の必須休憩制約を有効にする", value=self.constraints_config.get("enable_break_after_consecutive_slots", True))
             
             # 制約設定のプレビュー
             self._display_constraint_preview()
@@ -164,6 +184,8 @@ class ConstraintManager:
             constraints_preview.append("• 夜勤後の必須休日: 有効")
         if self.constraints_config["enable_break_after_long_shift"]:
             constraints_preview.append(f"• 長時間シフト後の必須休憩: {self.constraints_config['long_shift_threshold_hours']}時間以上→{self.constraints_config['required_break_hours']}時間休憩")
+        if self.constraints_config["enable_break_after_consecutive_slots"]:
+            constraints_preview.append(f"• 連続スロット後の必須休憩: {self.constraints_config['max_consecutive_slots']}スロット以上→{self.constraints_config['break_desk_name']}")
         
         if constraints_preview:
             for constraint in constraints_preview:
@@ -194,6 +216,11 @@ class ConstraintManager:
             constraints.append(RequiredBreakAfterLongShiftConstraint(
                 long_shift_threshold_hours=self.constraints_config["long_shift_threshold_hours"],
                 required_break_hours=self.constraints_config["required_break_hours"]
+            ))
+        if self.constraints_config["enable_break_after_consecutive_slots"]:
+            constraints.append(RequiredBreakAfterConsecutiveSlotsConstraint(
+                max_consecutive_slots=self.constraints_config["max_consecutive_slots"],
+                break_desk_name=self.constraints_config["break_desk_name"]
             ))
         
         # 制約が設定されていない場合の警告

@@ -64,6 +64,7 @@ class OperatorAvailability:
     operator_name: str
     available_slots: Set[str] = field(default_factory=set)
     preferred_slots: Set[str] = field(default_factory=set)
+    desks: Set[str] = field(default_factory=set)  # 対応可能なデスクのセット
     max_work_hours_per_day: float = 8.0
     min_rest_hours_between_shifts: float = 11.0
     
@@ -74,6 +75,10 @@ class OperatorAvailability:
     def prefers_slot(self, slot_id: str) -> bool:
         """指定されたスロットを好むかチェック"""
         return slot_id in self.preferred_slots
+    
+    def can_work_desk(self, desk_name: str) -> bool:
+        """指定されたデスクで働けるかチェック"""
+        return desk_name in self.desks
 
 @dataclass
 class DeskRequirement:
