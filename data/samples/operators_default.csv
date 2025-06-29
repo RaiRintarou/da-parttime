@@ -1,0 +1,11 @@
+name,start,end,home,desks
+Op1,9,12,Desk A,"Desk A,Desk B"
+Op2,9,12,Desk B,"Desk A,Desk B"
+Op3,10,15,Desk C,"Desk C,Desk D"
+Op4,11,16,Desk D,"Desk C,Desk D"
+Op5,9,17,Desk A,"Desk A,Desk B,Desk C"
+Op6,10,14,Desk B,"Desk A,Desk B"
+Op7,13,17,Desk C,"Desk C,Desk D"
+Op8,9,15,Desk D,"Desk C,Desk D"
+Op9,11,16,Desk A,"Desk A,Desk B,Desk C"
+Op10,9,13,Desk B,"Desk A,Desk B" 

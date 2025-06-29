@@ -2,16 +2,16 @@
 """
 制約設定UIのテスト
 
-Streamlitアプリの制約設定機能をテストします。
+Streamlitアプリの制約設定UIの動作をテストします。
 """
 
 import sys
 import os
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # プロジェクトルートをパスに追加
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from models.constraints import (
     MinRestHoursConstraint, MaxConsecutiveDaysConstraint,

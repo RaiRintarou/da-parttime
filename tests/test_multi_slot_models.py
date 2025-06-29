@@ -1,18 +1,20 @@
+#!/usr/bin/env python3
 """
 Multi-slot日次モデルのユニットテスト
 
-このモジュールは、Multi-slot日次モデルの各コンポーネントの
-動作を検証するためのテストケースを提供します。
+Multi-slot日次モデルの各クラスとアルゴリズムの動作をテストします。
 """
 
+import sys
+import os
+import unittest
+from datetime import datetime, timedelta
 import pytest
 import pandas as pd
 from datetime import datetime, time
-import sys
-import os
 
 # プロジェクトルートをパスに追加
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from models import (
     TimeSlot, DailySchedule, OperatorAvailability, 

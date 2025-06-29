@@ -315,20 +315,161 @@ if algorithm_choice == "制約付きMulti-slot DAアルゴリズム (推奨)":
 
 # ---------- オペレータ入力 ----------
 st.sidebar.header("2️⃣ オペレータ情報")
-num_ops = st.sidebar.number_input("オペレータ人数", 1, 200, 10)
 
-ops_data = []
-with st.expander("オペレータ設定 (クリックで開閉)"):
-    for i in range(num_ops):
-        c1, c2, c3, c4 = st.columns([2, 2, 2, 6])
-        name  = c1.text_input(f"名前 {i+1}", f"Op{i+1}")
-        start = c2.selectbox("開始", HOURS, key=f"s{i}")
-        end   = c2.selectbox("終了", [h+1 for h in HOURS],
-                             index=len(HOURS)-1, key=f"e{i}")
-        home  = c3.selectbox("所属デスク", DESKS, key=f"h{i}")        # ← NEW
-        desks = c4.multiselect("対応可能デスク", DESKS, DESKS, key=f"d{i}")
-        ops_data.append({"name": name, "start": start, "end": end,
-                         "home": home, "desks": desks})
+# オペレーターCSV読み込み機能
+st.sidebar.subheader("📁 オペレーターCSV読み込み")
+
+# オペレーターCSVテンプレートのダウンロード
+operators_template_data = """name,start,end,home,desks
+Op1,9,12,Desk A,"Desk A,Desk B"
+Op2,9,12,Desk B,"Desk A,Desk B"
+Op3,10,15,Desk C,"Desk C,Desk D"
+Op4,11,16,Desk D,"Desk C,Desk D"
+Op5,9,17,Desk A,"Desk A,Desk B,Desk C"
+"""
+st.sidebar.download_button(
+    "オペレーターCSVテンプレートDL", 
+    operators_template_data,
+    file_name="operators_template.csv", 
+    mime="text/csv"
+)
+
+# オペレーターCSVファイルアップロード
+try:
+    operators_file = st.sidebar.file_uploader(
+        "オペレーターCSVをアップロード", 
+        type="csv",
+        help="オペレーター情報のCSVファイルをアップロードするか、手動入力を使用してください"
+    )
+except Exception as e:
+    st.sidebar.error(f"オペレーターファイルアップロードエラー: {str(e)}")
+    operators_file = None
+
+# 手動入力オプション
+st.sidebar.subheader("または手動入力")
+manual_operator_input = st.sidebar.checkbox("手動でオペレーター情報を入力", value=False)
+
+if manual_operator_input or not operators_file:
+    # 従来の手動入力
+    num_ops = st.sidebar.number_input("オペレータ人数", 1, 200, 10)
+    
+    ops_data = []
+    with st.expander("オペレータ設定 (クリックで開閉)"):
+        for i in range(num_ops):
+            c1, c2, c3, c4 = st.columns([2, 2, 2, 6])
+            name  = c1.text_input(f"名前 {i+1}", f"Op{i+1}")
+            start = c2.selectbox("開始", HOURS, key=f"s{i}")
+            end   = c2.selectbox("終了", [h+1 for h in HOURS],
+                                 index=len(HOURS)-1, key=f"e{i}")
+            home  = c3.selectbox("所属デスク", DESKS, key=f"h{i}")
+            desks = c4.multiselect("対応可能デスク", DESKS, DESKS, key=f"d{i}")
+            ops_data.append({"name": name, "start": start, "end": end,
+                             "home": home, "desks": desks})
+    
+    if operators_file:
+        st.sidebar.warning("⚠️ CSVファイルがアップロードされていますが、手動入力が優先されます")
+
+elif operators_file:
+    # CSVファイルからオペレーター情報を読み込み
+    try:
+        operators_df = pd.read_csv(operators_file)
+        
+        # 必要な列の存在チェック
+        required_columns = ["name", "start", "end", "home", "desks"]
+        missing_columns = [col for col in required_columns if col not in operators_df.columns]
+        
+        if missing_columns:
+            st.sidebar.error(f"必要な列が不足しています: {missing_columns}")
+            st.sidebar.info("テンプレートをダウンロードして正しい形式でアップロードしてください")
+            st.stop()
+        
+        # データの検証と変換
+        ops_data = []
+        for _, row in operators_df.iterrows():
+            try:
+                # デスクリストの処理（カンマ区切りの文字列をリストに変換）
+                desks_str = str(row["desks"]).strip()
+                if desks_str.startswith('[') and desks_str.endswith(']'):
+                    # リスト形式の場合
+                    desks = eval(desks_str)
+                else:
+                    # カンマ区切りの場合
+                    desks = [d.strip() for d in desks_str.split(',') if d.strip()]
+                
+                # データの検証
+                if not desks:
+                    st.sidebar.warning(f"オペレーター {row['name']}: 対応可能デスクが設定されていません")
+                    continue
+                
+                # 存在しないデスクのチェック
+                invalid_desks = [d for d in desks if d not in DESKS]
+                if invalid_desks:
+                    st.sidebar.warning(f"オペレーター {row['name']}: 存在しないデスク {invalid_desks} が指定されています")
+                    # 無効なデスクを除外
+                    desks = [d for d in desks if d in DESKS]
+                
+                if not desks:
+                    st.sidebar.error(f"オペレーター {row['name']}: 有効なデスクがありません")
+                    continue
+                
+                # 所属デスクの検証
+                home = str(row["home"]).strip()
+                if home not in DESKS:
+                    st.sidebar.warning(f"オペレーター {row['name']}: 所属デスク {home} が存在しません。最初の対応可能デスクに設定します")
+                    home = desks[0]
+                
+                # 時間の検証
+                start = int(row["start"])
+                end = int(row["end"])
+                
+                if start not in HOURS:
+                    st.sidebar.warning(f"オペレーター {row['name']}: 開始時間 {start} が無効です。9時に設定します")
+                    start = 9
+                
+                if end not in [h+1 for h in HOURS]:
+                    st.sidebar.warning(f"オペレーター {row['name']}: 終了時間 {end} が無効です。18時に設定します")
+                    end = 18
+                
+                if start >= end:
+                    st.sidebar.error(f"オペレーター {row['name']}: 開始時間が終了時間以上です")
+                    continue
+                
+                ops_data.append({
+                    "name": str(row["name"]).strip(),
+                    "start": start,
+                    "end": end,
+                    "home": home,
+                    "desks": desks
+                })
+                
+            except Exception as e:
+                st.sidebar.error(f"オペレーター {row.get('name', 'Unknown')} のデータ処理エラー: {str(e)}")
+                continue
+        
+        if ops_data:
+            st.sidebar.success(f"✅ オペレーターCSV読み込み完了: {len(ops_data)}人")
+            
+            # 読み込んだオペレーター情報のプレビュー
+            st.subheader("👥 オペレーター情報プレビュー")
+            preview_data = []
+            for op in ops_data:
+                preview_data.append({
+                    "名前": op["name"],
+                    "勤務時間": f"{op['start']}時-{op['end']}時",
+                    "所属デスク": op["home"],
+                    "対応可能デスク": ", ".join(op["desks"])
+                })
+            
+            preview_df = pd.DataFrame(preview_data)
+            st.dataframe(preview_df, use_container_width=True)
+        else:
+            st.sidebar.error("❌ 有効なオペレーターデータがありません")
+            st.stop()
+            
+    except Exception as e:
+        st.sidebar.error(f"オペレーターCSV読み込みエラー: {str(e)}")
+        st.sidebar.info("ファイル形式を確認するか、手動入力を使用してください")
+        st.stop()
 
 # ---------- マッチング ----------
 # 従来の貪欲アルゴリズムは削除し、DAアルゴリズムを使用

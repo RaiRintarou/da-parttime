@@ -11,7 +11,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # プロジェクトルートをパスに追加
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from algorithms.constrained_multi_slot_da_algorithm import constrained_multi_slot_da_match
 from algorithms.multi_slot_da_algorithm import multi_slot_da_match

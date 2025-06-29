@@ -2,16 +2,16 @@
 """
 Multi-slot DAアルゴリズムのデバッグテスト
 
-2人のオペレーターで3時間の動作を確認します。
+2人のオペレーターで3時間の動作確認を行います。
 """
 
 import sys
 import os
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # プロジェクトルートをパスに追加
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from algorithms.multi_slot_da_algorithm import multi_slot_da_match
 from models.multi_slot_models import create_default_slots, convert_hourly_to_slots

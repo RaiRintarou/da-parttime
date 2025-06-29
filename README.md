@@ -1,214 +1,169 @@
 # シフトマッチングシステム
 
-このプロジェクトは、オペレータのシフト割り当てを最適化するためのStreamlitアプリケーションです。
+このプロジェクトは、オペレーターのシフト割り当てを最適化するためのStreamlitアプリケーションです。
 
-## 機能
+## 主な機能
 
-- **CSVアップロード**: デスク別の要員数をCSVファイルで指定
-- **オペレータ設定**: 各オペレータの勤務時間、所属デスク、対応可能デスクを設定
-- **マッチングアルゴリズム**: 
-  - **Multi-slot DAアルゴリズム（推奨）**: 日次スロットベースの柔軟な割り当て
-  - DA（Deferred Acceptance）アルゴリズム: 時間単位の安定マッチング
-  - 貪欲アルゴリズム: シンプルな逐次割り当て
-- **ポイント計算**: 他デスクでの勤務に対するポイント補填
-- **CSV出力**: 生成されたシフト表とポイント集計をCSVでダウンロード
+- **デスク要員数CSVアップロード**: デスクごとの時間帯要員数をCSVで指定
+- **オペレーター設定**: 手動入力またはCSVアップロードで勤務時間・所属・対応デスクを一括設定
+- **マッチングアルゴリズム選択**:
+  - 制約付きMulti-slot DAアルゴリズム（推奨）
+  - Multi-slot DAアルゴリズム
+  - DA（Deferred Acceptance）アルゴリズム
+  - 貪欲アルゴリズム
+- **制約設定UI**: 最小休息・最大連勤・最大週労働・夜勤回数・夜勤後休日などをGUIで調整
+- **シフト期間設定**: 1日/5日連続/カスタム日数でシフト生成
+- **ポイント計算**: 他デスク勤務に対するポイント補填
+- **シフト表・ポイント集計CSV出力**: 期間統合・個別日ごとにダウンロード可
+- **サンプル/テンプレートCSVのDL**: デスク・オペレーター両方に対応
 
-## ファイル構成
+## ファイル構成（2024/06/29時点）
 
 ```
 da_parttime/
-├── 📁 アプリケーション
-│   ├── main.py                              # メインエントリーポイント
-│   └── src/
-│       ├── __init__.py                      # メインパッケージ
-│       ├── 📁 app/
-│       │   ├── __init__.py                  # アプリケーションパッケージ
-│       │   └── streamlit_shift_matching_demo.py  # メインのStreamlitアプリ
-│       ├── 📁 algorithms/
-│       │   ├── __init__.py                  # アルゴリズムパッケージ
-│       │   ├── da_algorithm.py              # 従来の時間単位DAアルゴリズム
-│       │   └── multi_slot_da_algorithm.py   # Multi-slot DAアルゴリズム
-│       ├── 📁 models/
-│       │   ├── __init__.py                  # モデルパッケージ
-│       │   └── multi_slot_models.py         # スロットベースのデータ構造
-│       └── 📁 tests/
-│           ├── __init__.py                  # テストパッケージ
-│           └── test_multi_slot_models.py    # Multi-slotモデルのユニットテスト
+├── main.py
+├── Makefile
+├── pyproject.toml
+├── poetry.lock
+├── README.md
 │
-├── 📁 設定・ドキュメント
-│   ├── pyproject.toml                       # Poetry依存関係管理
-│   ├── poetry.lock                          # 依存関係ロックファイル
-│   ├── Makefile                            # ビルド・デプロイ設定
-│   ├── README.md                           # プロジェクト説明書
-│   └── docs/
-│       └── shift_optimiser_roadmap.md      # 開発ロードマップ
+├── src/
+│   ├── __init__.py
+│   ├── app/
+│   │   ├── __init__.py
+│   │   └── streamlit_shift_matching_demo.py
+│   ├── algorithms/
+│   │   ├── __init__.py
+│   │   ├── da_algorithm.py
+│   │   ├── multi_slot_da_algorithm.py
+│   │   └── constrained_multi_slot_da_algorithm.py
+│   └── models/
+│       ├── __init__.py
+│       ├── multi_slot_models.py
+│       └── constraints.py
 │
-├── 📁 サンプルデータ
-│   └── data/
-│       └── samples/
-│           ├── シフト表.csv                 # サンプルシフトデータ
-│           ├── シフト表.numbers             # Numbers形式サンプル
-│           └── 名称未設定.csv               # サンプルCSV
+├── tests/
+│   ├── __init__.py
+│   ├── test_multi_slot_models.py
+│   ├── test_constraints.py
+│   ├── test_5day_shift.py
+│   ├── test_operator_csv.py
+│   ├── test_constraint_ui.py
+│   ├── test_constrained_algorithm.py
+│   └── test_multi_slot_debug.py
 │
-└── 📁 開発環境
-    ├── .venv/                              # Poetry仮想環境
-    ├── .git/                               # Gitリポジトリ
-    ├── .vscode/                            # VS Code設定
-    └── __pycache__/                        # Pythonキャッシュ
+├── data/
+│   ├── samples/
+│   │   ├── シフト表.csv
+│   │   ├── シフト表.numbers
+│   │   ├── 名称未設定.csv
+│   │   └── operators_default.csv
+│   └── templates/
+│       └── operators_template.csv
+│
+└── docs/
+    └── shift_optimiser_roadmap.md
 ```
 
-### 主要ファイルの説明
+## 主要ファイル・ディレクトリの説明
 
-#### アプリケーション層
-- **`streamlit_shift_matching_demo.py`**: メインのWebアプリケーション
-  - CSVアップロード機能
-  - オペレータ設定UI
-  - アルゴリズム選択
-  - 結果表示・ダウンロード
+### ルート直下
+- **main.py**: アプリケーションのエントリーポイント
+- **Makefile**: ビルド・実行・テスト・フォーマット等のコマンド集
+- **pyproject.toml / poetry.lock**: Poetryによる依存管理
+- **README.md**: 本ファイル
 
-#### アルゴリズム層
-- **`da_algorithm.py`**: 従来の時間単位DAアルゴリズム
-  - 9-17時の時間単位でのマッチング
-  - 安定マッチング保証
-  - 後方互換性維持
+### src/
+- **app/**
+  - `streamlit_shift_matching_demo.py`: Web UI本体。デスク・オペレーターCSV入出力、制約設定、アルゴリズム選択、シフト生成・DLまで一括管理。
+- **algorithms/**
+  - `da_algorithm.py`: 時間単位DAアルゴリズム（後方互換）
+  - `multi_slot_da_algorithm.py`: スロット単位DAアルゴリズム
+  - `constrained_multi_slot_da_algorithm.py`: 制約付きスロットDAアルゴリズム
+- **models/**
+  - `multi_slot_models.py`: スロット・オペレーター・割当等のデータ構造
+  - `constraints.py`: 制約DSL・バリデーション・各種制約クラス
 
-- **`multi_slot_models.py`**: Multi-slot日次モデルの基盤
-  - `TimeSlot`: 時間スロット定義（朝・午後・夜・夜勤）
-  - `OperatorAvailability`: オペレータの利用可能性
-  - `DeskRequirement`: デスクの要件定義
-  - `Assignment`: 割り当て情報
-  - `MultiSlotScheduler`: スケジューラー
+### tests/
+- `test_multi_slot_models.py`: モデル・アルゴリズムのユニットテスト
+- `test_constraints.py`: 制約ロジックのテスト
+- `test_5day_shift.py`: 5日分シフト生成の動作確認
+- `test_operator_csv.py`: オペレーターCSV読み込みの動作確認
+- `test_constraint_ui.py`: 制約UIテスト
+- `test_constrained_algorithm.py`: 制約付きアルゴリズムテスト
+- `test_multi_slot_debug.py`: デバッグ用テスト
 
-- **`multi_slot_da_algorithm.py`**: Multi-slot DAアルゴリズム
-  - 日次スロットベースのマッチング
-  - 制約検証機能
-  - 従来データとの変換機能
+### data/
+- **samples/**
+  - `シフト表.csv`: デスク要員数サンプル
+  - `operators_default.csv`: オペレーターサンプル
+- **templates/**
+  - `operators_template.csv`: オペレーターCSVテンプレート
 
-#### テスト層
-- **`test_multi_slot_models.py`**: 包括的なユニットテスト
-  - 各クラスの動作検証
-  - アルゴリズムの正確性確認
-  - エッジケースのテスト
+### docs/
+- `shift_optimiser_roadmap.md`: 開発ロードマップ
 
-## Multi-slot日次モデルについて
-
-### 従来モデルとの違い
-
-| 項目 | 従来モデル | Multi-slotモデル |
-|------|------------|------------------|
-| 時間単位 | 1時間単位 | スロット単位（朝3h、午後5h等） |
-| 柔軟性 | 固定時間 | カスタマイズ可能スロット |
-| 制約 | 時間制約のみ | 労働時間・休息時間制約 |
-| 拡張性 | 限定的 | 高（新しいスロットタイプ追加可能） |
-
-### スロット定義
-
-- **朝シフト (morning)**: 9:00-12:00 (3時間)
-- **午後シフト (afternoon)**: 12:00-17:00 (5時間)
-- **夜シフト (evening)**: 17:00-21:00 (4時間)
-- **夜勤シフト (night)**: 21:00-9:00 (12時間)
-
-## DAアルゴリズムについて
-
-DA（Deferred Acceptance）アルゴリズムは、安定マッチングを保証するアルゴリズムです。
-
-### 特徴
-
-1. **安定性**: どのオペレータも、現在の割り当てよりも好ましいデスクに移動できない
-2. **公平性**: 所属デスクのオペレータを優先的に割り当て
-3. **効率性**: 各時間帯で最適な割り当てを実現
-
-### アルゴリズムの流れ
-
-1. 各時間帯で独立してマッチングを実行
-2. オペレータは自分の優先順位に従ってデスクに提案
-3. デスクは受け入れ可能なオペレータを優先順位に従って選択
-4. 競合が発生した場合、優先度の低いオペレータを除外
-5. 全てのオペレータが割り当てられるまで繰り返し
-
-## 使用方法
+## 使い方
 
 ### 1. 環境構築
 ```bash
-# Poetryで依存関係をインストール
-poetry install
-
-# 開発用依存関係も含めてインストール
 poetry install --with dev
 ```
 
 ### 2. アプリケーション起動
 ```bash
-# 方法1: メインエントリーポイントを使用（推奨）
-poetry run python main.py
-
-# 方法2: 直接Streamlitを起動
-poetry run streamlit run src/app/streamlit_shift_matching_demo.py
-
-# 方法3: Makefileを使用
 make run
+# または
+poetry run python main.py
 ```
 
 ### 3. テスト実行
 ```bash
-# 全テストを実行
-poetry run pytest src/tests/ -v
-
-# 特定のテストファイルを実行
-poetry run pytest src/tests/test_multi_slot_models.py -v
-
-# Makefileを使用
 make test
-
-# カバレッジ付きでテスト実行
-poetry run pytest --cov=src/models --cov=src/algorithms
+# または
+poetry run pytest tests/ -v
 ```
 
-### 4. アプリケーション使用手順
+### 4. Webアプリの操作手順
+1. **デスク要員数CSV**をアップロード（テンプレDL可）
+2. **オペレーター情報**を手動入力 or CSVアップロード（テンプレDL可）
+3. **シフト期間**（1日/5日/カスタム）・**開始日**を選択
+4. **制約**（必要に応じて）を設定
+5. **アルゴリズム**を選択
+6. **「Match & Generate Schedule」ボタン**でシフト生成
+7. **シフト表・ポイント集計CSV**をDL（5日分の場合は個別日DLも可）
 
-1. デスク要員数のCSVファイルをアップロード（またはテンプレートを使用）
+## サンプルCSV
 
-2. オペレータ情報を設定:
-   - 名前
-   - 勤務時間（開始・終了）
-   - 所属デスク
-   - 対応可能デスク
-
-3. マッチングアルゴリズムを選択:
-   - **Multi-slot DAアルゴリズム（推奨）**: 最新の日次スロットベース
-   - **DAアルゴリズム**: 従来の時間単位
-   - **貪欲アルゴリズム**: シンプルな逐次割り当て
-
-4. 「Match & Generate Schedule」ボタンをクリック
-
-5. 生成されたシフト表とポイント集計を確認・ダウンロード
-
-## 開発環境
-
-### 必要なライブラリ
-- **streamlit**: Webアプリケーションフレームワーク
-- **pandas**: データ処理
-- **pytest**: テストフレームワーク（開発用）
-
-### インストール
-```bash
-# Poetryを使用したインストール（推奨）
-poetry install
-
-# または従来のpipを使用
-pip install streamlit pandas pytest
+### デスク要員数テンプレート
+```
+desk,h09,h10,h11,h12,h13,h14,h15,h16,h17
+Desk A,1,1,1,0,0,0,0,0,0
+Desk B,1,1,1,0,0,0,0,0,0
 ```
 
-## 開発ロードマップ
+### オペレーターCSVテンプレート
+```
+name,start,end,home,desks
+Op1,9,12,Desk A,"Desk A,Desk B"
+Op2,9,12,Desk B,"Desk A,Desk B"
+```
 
-詳細な開発計画は `shift_optimiser_roadmap.md` を参照してください。
+## 必要なライブラリ
+- Python 3.11
+- streamlit
+- pandas
+- pytest（開発用）
 
-### 現在の実装状況
-- ✅ **Phase 0.1**: Multi-slot日次モデルの実装
-- ✅ **Phase 0.1**: ユニットテストの実装
-- 🔄 **Phase 0.2**: CI/CDパイプラインの構築
-- ⏳ **Phase 1**: MVP for Single-Site Pilot
+## よくある質問
 
-## ライセンス
+- **Q. オペレーターCSVの「desks」列はどう書く？**
+  - カンマ区切りで複数デスク指定可。例: `"Desk A,Desk B"`
+- **Q. 5日分シフトを出したい場合は？**
+  - サイドバー「シフト期間設定」で「5日連続」または「カスタム」を選択
+- **Q. 制約はどこで設定？**
+  - 「制約付きMulti-slot DAアルゴリズム」選択時、サイドバー下部で各種制約をGUI設定
 
-MIT License 
+---
+
+ご質問・不具合はGitHub Issueまたは開発者までご連絡ください。 

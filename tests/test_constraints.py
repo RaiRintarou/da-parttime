@@ -1,14 +1,20 @@
+#!/usr/bin/env python3
 """
 制約システムのユニットテスト
 
-このモジュールは、Hard Constraint DSLの機能をテストします。
+制約DSL、バリデーター、各種制約クラスの動作をテストします。
 """
 
+import sys
+import os
 import unittest
 from datetime import datetime, timedelta
 from typing import List
 
-from ..models.constraints import (
+# プロジェクトルートをパスに追加
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from models.constraints import (
     ConstraintType,
     Constraint,
     MinRestHoursConstraint,
@@ -21,7 +27,7 @@ from ..models.constraints import (
     create_default_constraints,
     DEFAULT_CONSTRAINT_DSL
 )
-from ..models.multi_slot_models import Assignment, OperatorAvailability
+from models.multi_slot_models import Assignment, OperatorAvailability, TimeSlot
 
 class TestConstraintTypes(unittest.TestCase):
     """制約タイプのテスト"""
