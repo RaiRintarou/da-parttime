@@ -209,7 +209,7 @@ class MultiSlotDAMatchingAlgorithm:
         return errors
 
 def convert_legacy_operators_to_multi_slot(legacy_ops: List[Dict]) -> List[OperatorAvailability]:
-    """従来のオペレータデータをMulti-slot形式に変換"""
+    """従来のオペレータデータをMulti-slot形式に変換（1時間単位）"""
     operators = []
     
     for op_data in legacy_ops:
@@ -220,22 +220,11 @@ def convert_legacy_operators_to_multi_slot(legacy_ops: List[Dict]) -> List[Opera
         available_slots = set()
         preferred_slots = set()
         
-        # 時間範囲に基づいて利用可能なスロットを決定（修正版）
-        # morning: 9-12時
-        if start_hour < 12 and end_hour > 9:
-            available_slots.add("morning")
-        
-        # afternoon: 12-17時
-        if start_hour < 17 and end_hour > 12:
-            available_slots.add("afternoon")
-        
-        # evening: 17-21時
-        if start_hour < 21 and end_hour > 17:
-            available_slots.add("evening")
-        
-        # night: 21-9時（夜勤）
-        if start_hour >= 21 or end_hour <= 9:
-            available_slots.add("night")
+        # 時間範囲に基づいて利用可能なスロットを決定（1時間単位）
+        for hour in range(start_hour, end_hour):
+            if 9 <= hour < 18:  # 9時から17時まで
+                slot_id = f"h{hour:02d}"
+                available_slots.add(slot_id)
         
         # 所属デスクを好ましいスロットとして設定
         home_desk = op_data.get("home", "")
@@ -286,7 +275,7 @@ def convert_assignments_to_dataframe(assignments: List[Assignment],
                                    slots: List[TimeSlot], 
                                    desks: List[str], 
                                    target_date: datetime) -> pd.DataFrame:
-    """割り当て結果を従来のDataFrame形式に変換"""
+    """割り当て結果を従来のDataFrame形式に変換（1時間単位）"""
     # オペレータ名のリストを取得
     operator_names = list(set(assignment.operator_name for assignment in assignments))
     
@@ -294,13 +283,8 @@ def convert_assignments_to_dataframe(assignments: List[Assignment],
     hours = list(range(9, 18))
     cols = ["desk"] + [f"h{h:02d}" for h in hours]
     
-    # スロットから時間へのマッピング
-    slot_to_hours = {
-        "morning": list(range(9, 12)),
-        "afternoon": list(range(12, 17)),
-        "evening": list(range(17, 21)),
-        "night": list(range(21, 24)) + list(range(0, 9))
-    }
+    # 1時間単位のスロットから時間へのマッピング
+    slot_to_hours = {f"h{hour:02d}": [hour] for hour in range(9, 18)}
     
     # 各オペレータのスケジュールを作成
     schedule = {}

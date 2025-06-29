@@ -12,20 +12,25 @@ from datetime import datetime, time
 from enum import Enum
 
 class SlotType(Enum):
-    """スロットタイプの定義"""
-    MORNING = "morning"      # 朝シフト (9:00-12:00)
-    AFTERNOON = "afternoon"  # 午後シフト (12:00-17:00)
-    EVENING = "evening"      # 夜シフト (17:00-21:00)
-    NIGHT = "night"          # 夜勤シフト (21:00-9:00)
+    """スロットタイプの定義（1時間単位）"""
+    HOUR_09 = "h09"  # 9:00-10:00
+    HOUR_10 = "h10"  # 10:00-11:00
+    HOUR_11 = "h11"  # 11:00-12:00
+    HOUR_12 = "h12"  # 12:00-13:00
+    HOUR_13 = "h13"  # 13:00-14:00
+    HOUR_14 = "h14"  # 14:00-15:00
+    HOUR_15 = "h15"  # 15:00-16:00
+    HOUR_16 = "h16"  # 16:00-17:00
+    HOUR_17 = "h17"  # 17:00-18:00
 
 @dataclass
 class TimeSlot:
-    """時間スロットの定義"""
+    """時間スロットの定義（1時間単位）"""
     slot_id: str
     slot_type: SlotType
     start_time: time
     end_time: time
-    duration_hours: float
+    duration_hours: float = 1.0
     
     def __post_init__(self):
         """スロット作成後の検証"""
@@ -142,46 +147,42 @@ class MultiSlotScheduler:
         return total_hours
 
 def create_default_slots() -> List[TimeSlot]:
-    """デフォルトのスロット設定を作成"""
-    slots = [
-        TimeSlot("morning", SlotType.MORNING, time(9, 0), time(12, 0), 3.0),
-        TimeSlot("afternoon", SlotType.AFTERNOON, time(12, 0), time(17, 0), 5.0),
-        TimeSlot("evening", SlotType.EVENING, time(17, 0), time(21, 0), 4.0),
-        TimeSlot("night", SlotType.NIGHT, time(21, 0), time(9, 0), 12.0),
-    ]
+    """デフォルトのスロット設定を作成（1時間単位）"""
+    slots = []
+    for hour in range(9, 18):  # 9時から17時まで
+        slot_id = f"h{hour:02d}"
+        # SlotTypeの正しいメンバーにアクセス
+        slot_type_name = f"HOUR_{hour:02d}"
+        slot_type = getattr(SlotType, slot_type_name)
+        start_time = time(hour, 0)
+        end_time = time(hour + 1, 0) if hour < 23 else time(0, 0)
+        
+        slots.append(TimeSlot(
+            slot_id=slot_id,
+            slot_type=slot_type,
+            start_time=start_time,
+            end_time=end_time,
+            duration_hours=1.0
+        ))
     return slots
 
 def convert_hourly_to_slots(hourly_requirements: pd.DataFrame) -> List[DeskRequirement]:
-    """時間単位の要件をスロット単位に変換"""
+    """時間単位の要件をスロット単位に変換（1時間単位）"""
     desk_requirements = []
-    
-    # デフォルトスロット定義
-    default_slots = create_default_slots()
-    slot_mappings = {
-        "morning": list(range(9, 12)),    # 9-12時
-        "afternoon": list(range(12, 17)), # 12-17時
-        "evening": list(range(17, 21)),   # 17-21時
-        "night": list(range(21, 24)) + list(range(0, 9))  # 21-9時
-    }
     
     for _, row in hourly_requirements.iterrows():
         desk_name = str(row["desk"])
         desk_req = DeskRequirement(desk_name=desk_name)
         
-        for slot_id, hours in slot_mappings.items():
-            # 各スロットの要件を計算（時間の最大値を使用）
-            slot_requirements = []
-            for hour in hours:
-                if hour < 24:  # 24時間制の範囲内
-                    col_name = f"h{hour:02d}"
-                    if col_name in row:
-                        slot_requirements.append(row[col_name])
+        # 各時間帯の要件を直接スロットに設定
+        for hour in range(9, 18):  # 9時から17時まで
+            slot_id = f"h{hour:02d}"
+            col_name = f"h{hour:02d}"
             
-            if slot_requirements:
-                # スロットの要件を設定（最大値を使用）
-                max_requirement = max(slot_requirements)
-                desk_req.set_requirement_for_slot(slot_id, max_requirement)
-                print(f"DEBUG: {desk_name} {slot_id}スロット要件: {max_requirement} (時間: {slot_requirements})")
+            if col_name in row:
+                requirement = int(row[col_name])
+                desk_req.set_requirement_for_slot(slot_id, requirement)
+                print(f"DEBUG: {desk_name} {slot_id}スロット要件: {requirement}")
         
         desk_requirements.append(desk_req)
     

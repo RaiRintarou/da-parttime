@@ -22,8 +22,8 @@ from models.multi_slot_models import (
 from models.constraints import (
     Constraint, MinRestHoursConstraint, MaxConsecutiveDaysConstraint,
     MaxWeeklyHoursConstraint, MaxNightShiftsPerWeekConstraint,
-    RequiredDayOffAfterNightConstraint, ConstraintValidator,
-    create_default_constraints
+    RequiredDayOffAfterNightConstraint, RequiredBreakAfterLongShiftConstraint,
+    ConstraintValidator, create_default_constraints
 )
 
 class ConstrainedMultiSlotDAMatchingAlgorithm:
@@ -242,7 +242,7 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
         return self.constraint_validator.validate_all(assignments, operators)
 
 def convert_legacy_operators_to_multi_slot(legacy_ops: List[Dict]) -> List[OperatorAvailability]:
-    """従来のオペレータデータをMulti-slot形式に変換"""
+    """従来のオペレータデータをMulti-slot形式に変換（1時間単位）"""
     operators = []
     
     for op_data in legacy_ops:
@@ -253,22 +253,11 @@ def convert_legacy_operators_to_multi_slot(legacy_ops: List[Dict]) -> List[Opera
         available_slots = set()
         preferred_slots = set()
         
-        # 時間範囲に基づいて利用可能なスロットを決定（修正版）
-        # morning: 9-12時
-        if start_hour < 12 and end_hour > 9:
-            available_slots.add("morning")
-        
-        # afternoon: 12-17時
-        if start_hour < 17 and end_hour > 12:
-            available_slots.add("afternoon")
-        
-        # evening: 17-21時
-        if start_hour < 21 and end_hour > 17:
-            available_slots.add("evening")
-        
-        # night: 21-9時（夜勤）
-        if start_hour >= 21 or end_hour <= 9:
-            available_slots.add("night")
+        # 時間範囲に基づいて利用可能なスロットを決定（1時間単位）
+        for hour in range(start_hour, end_hour):
+            if 9 <= hour < 18:  # 9時から17時まで
+                slot_id = f"h{hour:02d}"
+                available_slots.add(slot_id)
         
         # 所属デスクを好ましいスロットとして設定
         home_desk = op_data.get("home", "")
@@ -288,7 +277,7 @@ def convert_legacy_operators_to_multi_slot(legacy_ops: List[Dict]) -> List[Opera
 def constrained_multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_ops: List[Dict], 
                                   constraints: Optional[List[Constraint]] = None,
                                   target_date: Optional[datetime] = None) -> Tuple[List[Assignment], pd.DataFrame]:
-    """制約付きMulti-slot DAアルゴリズムによるマッチング"""
+    """制約付きMulti-slot DAアルゴリズムによるマッチング実行"""
     if target_date is None:
         target_date = datetime.now()
     
@@ -296,59 +285,123 @@ def constrained_multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_op
     slots = create_default_slots()
     
     # デスクリストを取得
-    desks = hourly_requirements["desk"].astype(str).tolist()
+    desks = hourly_requirements["desk"].tolist()
     
     # 時間単位の要件をスロット単位に変換
     desk_requirements = convert_hourly_to_slots(hourly_requirements)
     
-    # 従来のオペレータデータをMulti-slot形式に変換
+    # レガシーオペレータをMulti-slot形式に変換
     operators = convert_legacy_operators_to_multi_slot(legacy_ops)
     
-    # 制約付きDAアルゴリズムを実行
-    da_algorithm = ConstrainedMultiSlotDAMatchingAlgorithm(slots, desks, constraints)
-    assignments = da_algorithm.match_daily(operators, desk_requirements, target_date)
+    # 制約付きアルゴリズムを作成
+    algorithm = ConstrainedMultiSlotDAMatchingAlgorithm(slots, desks, constraints)
     
-    # 結果を従来のDataFrame形式に変換（後方互換性のため）
-    schedule_df = convert_assignments_to_dataframe(assignments, slots, desks, target_date)
+    # 1日分のマッチングを実行
+    assignments = algorithm.match_daily(operators, desk_requirements, target_date)
     
-    return assignments, schedule_df
+    # 休憩時間制約がある場合、休憩割り当てを追加
+    if constraints:
+        break_constraint = next((c for c in constraints if isinstance(c, RequiredBreakAfterLongShiftConstraint)), None)
+        if break_constraint:
+            break_assignments = break_constraint.get_break_assignments(assignments, operators)
+            # 休憩割り当てを既存の割り当てに追加（シフト表生成時に反映）
+            print(f"DEBUG: 休憩割り当て数: {len(break_assignments)}")
+            for break_assignment in break_assignments:
+                print(f"DEBUG: 休憩割り当て: {break_assignment}")
+    
+    # 割り当て結果をDataFrameに変換
+    schedule = convert_assignments_to_dataframe(assignments, slots, desks, target_date)
+    
+    return assignments, schedule
 
 def convert_assignments_to_dataframe(assignments: List[Assignment], 
                                    slots: List[TimeSlot], 
                                    desks: List[str], 
                                    target_date: datetime) -> pd.DataFrame:
-    """割り当て結果を従来のDataFrame形式に変換"""
-    # オペレータ名のリストを取得
-    operator_names = list(set(assignment.operator_name for assignment in assignments))
+    """割り当て結果をDataFrameに変換（1時間単位）"""
+    # 1時間単位のスロットの時間定義
+    slot_hours = {f"h{hour:02d}": 1.0 for hour in range(9, 18)}
     
-    # 従来の時間列を作成（9-17時）
-    hours = list(range(9, 18))
-    cols = ["desk"] + [f"h{h:02d}" for h in hours]
+    # 各デスクの各スロットの割り当てを集計
+    schedule_data = []
     
-    # スロットから時間へのマッピング
-    slot_to_hours = {
-        "morning": list(range(9, 12)),
-        "afternoon": list(range(12, 17)),
-        "evening": list(range(17, 21)),
-        "night": list(range(21, 24)) + list(range(0, 9))
-    }
-    
-    # 各オペレータのスケジュールを作成
-    schedule = {}
-    for op_name in operator_names:
-        schedule[op_name] = {f"h{h:02d}": "" for h in hours}
+    for desk in desks:
+        row = {"desk": desk}
         
-        # このオペレータの割り当てを処理
-        for assignment in assignments:
-            if assignment.operator_name == op_name:
-                slot_id = assignment.slot_id
-                desk_name = assignment.desk_name
-                
-                # スロットに対応する時間にデスク名を設定
-                if slot_id in slot_to_hours:
-                    for hour in slot_to_hours[slot_id]:
-                        if 9 <= hour < 18:  # 従来の時間範囲内のみ
-                            col_name = f"h{hour:02d}"
-                            schedule[op_name][col_name] = desk_name
+        for slot in slots:
+            # このデスクのこのスロットの割り当てをカウント
+            slot_assignments = [
+                a for a in assignments 
+                if a.desk_name == desk and a.slot_id == slot.slot_id
+            ]
+            
+            # 割り当て人数を記録
+            row[slot.slot_id] = str(len(slot_assignments))
+            
+            # 割り当てられたオペレータ名も記録
+            if slot_assignments:
+                operator_names = [a.operator_name for a in slot_assignments]
+                row[f"{slot.slot_id}_operators"] = ", ".join(operator_names)
+            else:
+                row[f"{slot.slot_id}_operators"] = ""
+        
+        schedule_data.append(row)
     
-    return pd.DataFrame(schedule).T 
+    # DataFrameを作成
+    schedule_df = pd.DataFrame(schedule_data)
+    
+    # 休憩時間を追加（長時間シフト後の必須休憩制約がある場合）
+    schedule_df = add_break_assignments_to_schedule(schedule_df, assignments, slots, desks, target_date)
+    
+    return schedule_df
+
+def add_break_assignments_to_schedule(schedule_df: pd.DataFrame, 
+                                     assignments: List[Assignment], 
+                                     slots: List[TimeSlot], 
+                                     desks: List[str], 
+                                     target_date: datetime) -> pd.DataFrame:
+    """シフト表に休憩割り当てを追加"""
+    # 長時間シフト後の必須休憩制約をチェック
+    from models.constraints import RequiredBreakAfterLongShiftConstraint
+    
+    # オペレータ情報を取得（簡略化のため、割り当てから推測）
+    operator_names = list(set([a.operator_name for a in assignments]))
+    operators = []
+    for op_name in operator_names:
+        op = type('OperatorAvailability', (), {
+            'operator_name': op_name,
+            'can_work_slot': lambda self, slot_id: True,
+            'prefers_slot': lambda self, slot_id: False
+        })()
+        operators.append(op)
+    
+    # 休憩時間制約をチェック
+    break_constraint = RequiredBreakAfterLongShiftConstraint()
+    break_assignments = break_constraint.get_break_assignments(assignments, operators)
+    
+    if break_assignments:
+        # 休憩割り当てをシフト表に追加
+        for break_assignment in break_assignments:
+            operator_name = break_assignment['operator_name']
+            break_hour = break_assignment['break_hour']
+            desk_name = break_assignment['desk_name']
+            
+            # 時間帯の列名を作成（例：h10）
+            hour_col = f"h{break_hour:02d}"
+            
+            # シフト表に休憩時間を追加
+            if hour_col not in schedule_df.columns:
+                schedule_df[hour_col] = ""
+                schedule_df[f"{hour_col}_operators"] = ""
+            
+            # 該当オペレータの休憩時間を記録
+            for idx, row in schedule_df.iterrows():
+                if row['desk'] in operator_name or operator_name in row['desk']:
+                    schedule_df.at[idx, hour_col] = str(desk_name)  # "休憩"
+                    current_operators = schedule_df.at[idx, f"{hour_col}_operators"]
+                    if current_operators:
+                        schedule_df.at[idx, f"{hour_col}_operators"] = f"{current_operators}, {operator_name} (休憩)"
+                    else:
+                        schedule_df.at[idx, f"{hour_col}_operators"] = f"{operator_name} (休憩)"
+    
+    return schedule_df 

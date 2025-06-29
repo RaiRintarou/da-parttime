@@ -17,7 +17,7 @@
 - **シフト表・ポイント集計CSV出力**: 期間統合・個別日ごとにダウンロード可
 - **サンプル/テンプレートCSVのDL**: デスク・オペレーター両方に対応
 
-## ファイル構成（2024/06/29時点）
+## ファイル構成（2024/12/19時点）
 
 ```
 da_parttime/
@@ -53,12 +53,12 @@ da_parttime/
 │   └── test_multi_slot_debug.py
 │
 ├── data/
-│   ├── samples/
+│   ├── shifts/
 │   │   ├── シフト表.csv
 │   │   ├── シフト表.numbers
-│   │   ├── 名称未設定.csv
-│   │   └── operators_default.csv
-│   └── templates/
+│   │   └── 名称未設定.csv
+│   └── operators/
+│       ├── operators_default.csv
 │       └── operators_template.csv
 │
 └── docs/
@@ -94,10 +94,12 @@ da_parttime/
 - `test_multi_slot_debug.py`: デバッグ用テスト
 
 ### data/
-- **samples/**
+- **shifts/**
   - `シフト表.csv`: デスク要員数サンプル
+  - `シフト表.numbers`: デスク要員数サンプル（Numbers形式）
+  - `名称未設定.csv`: デスク要員数サンプル
+- **operators/**
   - `operators_default.csv`: オペレーターサンプル
-- **templates/**
   - `operators_template.csv`: オペレーターCSVテンプレート
 
 ### docs/

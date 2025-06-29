@@ -22,6 +22,7 @@ from models.constraints import (
     MaxWeeklyHoursConstraint,
     MaxNightShiftsPerWeekConstraint,
     RequiredDayOffAfterNightConstraint,
+    RequiredBreakAfterLongShiftConstraint,
     ConstraintParser,
     ConstraintValidator,
     create_default_constraints,
@@ -589,12 +590,13 @@ class TestDefaultConstraints(unittest.TestCase):
         """デフォルト制約セットの作成テスト"""
         constraints = create_default_constraints()
         
-        self.assertEqual(len(constraints), 5)
+        self.assertEqual(len(constraints), 6)  # 休憩時間制約が追加されたため6個
         self.assertIsInstance(constraints[0], MinRestHoursConstraint)
         self.assertIsInstance(constraints[1], MaxConsecutiveDaysConstraint)
         self.assertIsInstance(constraints[2], MaxWeeklyHoursConstraint)
         self.assertIsInstance(constraints[3], MaxNightShiftsPerWeekConstraint)
         self.assertIsInstance(constraints[4], RequiredDayOffAfterNightConstraint)
+        self.assertIsInstance(constraints[5], RequiredBreakAfterLongShiftConstraint)
     
     def test_default_constraint_dsl(self):
         """デフォルト制約DSLのテスト"""
@@ -607,6 +609,117 @@ class TestDefaultConstraints(unittest.TestCase):
         self.assertIsInstance(constraints[2], MaxWeeklyHoursConstraint)
         self.assertIsInstance(constraints[3], MaxNightShiftsPerWeekConstraint)
         self.assertIsInstance(constraints[4], RequiredDayOffAfterNightConstraint)
+
+class TestRequiredBreakAfterLongShiftConstraint(unittest.TestCase):
+    """長時間シフト後の必須休憩制約のテスト"""
+    
+    def setUp(self):
+        """テストデータの準備"""
+        self.base_date = datetime(2024, 1, 1)
+        self.operators = [
+            OperatorAvailability(operator_name="Op1"),
+            OperatorAvailability(operator_name="Op2")
+        ]
+    
+    def test_required_break_after_long_shift_constraint(self):
+        """長時間シフト後の必須休憩制約のテスト"""
+        constraint = RequiredBreakAfterLongShiftConstraint(
+            long_shift_threshold_hours=5.0,
+            required_break_hours=1.0
+        )
+        
+        # 長時間シフト（5時間）の後に短時間シフト（3時間）がある場合（制約違反）
+        assignments = [
+            Assignment("Op1", "Desk A", "afternoon", self.base_date),  # 5時間
+            Assignment("Op1", "Desk A", "evening", self.base_date),    # 4時間（休憩なし）
+        ]
+        
+        # 制約違反をチェック
+        self.assertFalse(constraint.validate(assignments, self.operators))
+        
+        # 長時間シフト（5時間）の後に十分な休憩がある場合（制約遵守）
+        assignments = [
+            Assignment("Op1", "Desk A", "afternoon", self.base_date),  # 5時間
+            Assignment("Op1", "Desk A", "night", self.base_date),      # 12時間（十分な休憩）
+        ]
+        
+        # 制約遵守をチェック
+        self.assertTrue(constraint.validate(assignments, self.operators))
+    
+    def test_required_break_slots_generation(self):
+        """必要な休憩スロットの生成テスト"""
+        constraint = RequiredBreakAfterLongShiftConstraint(
+            long_shift_threshold_hours=5.0,
+            required_break_hours=1.0
+        )
+        
+        # 長時間シフトの後に短時間シフトがある場合
+        assignments = [
+            Assignment("Op1", "Desk A", "afternoon", self.base_date),  # 5時間
+            Assignment("Op1", "Desk A", "evening", self.base_date),    # 4時間
+        ]
+        
+        # 必要な休憩スロットを取得
+        break_slots = constraint.get_required_break_slots(assignments, self.operators)
+        
+        # 休憩スロットが生成されることを確認
+        self.assertEqual(len(break_slots), 1)
+        self.assertEqual(break_slots[0]['operator_name'], "Op1")
+        self.assertEqual(break_slots[0]['break_start'], "17:00")
+        self.assertEqual(break_slots[0]['break_end'], "17:00")
+        self.assertEqual(break_slots[0]['duration_hours'], 1.0)
+        self.assertIn("連続稼働5.0時間後の必須休憩", break_slots[0]['reason'])
+    
+    def test_parse_required_break_after_long_shift(self):
+        """長時間シフト後の必須休憩制約のパーステスト"""
+        constraint_text = "required_break_after_long_shift = 5.0, 1.0"
+        parser = ConstraintParser()
+        constraints = parser.parse_constraints(constraint_text)
+        
+        self.assertEqual(len(constraints), 1)
+        self.assertIsInstance(constraints[0], RequiredBreakAfterLongShiftConstraint)
+        if isinstance(constraints[0], RequiredBreakAfterLongShiftConstraint):
+            self.assertEqual(constraints[0].long_shift_threshold_hours, 5.0)
+            self.assertEqual(constraints[0].required_break_hours, 1.0)
+
+    def test_break_assignments_generation(self):
+        """休憩割り当ての生成テスト"""
+        constraint = RequiredBreakAfterLongShiftConstraint(
+            long_shift_threshold_hours=5.0,
+            required_break_hours=1.0
+        )
+        
+        # 長時間シフトの後に短時間シフトがある場合
+        assignments = [
+            Assignment("Op1", "Desk A", "afternoon", self.base_date),  # 5時間
+            Assignment("Op1", "Desk A", "evening", self.base_date),    # 4時間
+        ]
+        
+        # 必要な休憩割り当てを取得
+        break_assignments = constraint.get_break_assignments(assignments, self.operators)
+        
+        # 休憩割り当てが生成されることを確認
+        self.assertEqual(len(break_assignments), 1)
+        self.assertEqual(break_assignments[0]['operator_name'], "Op1")
+        self.assertEqual(break_assignments[0]['break_hour'], 16)  # afternoon(12-17) + evening(17-21) の真ん中付近
+        self.assertEqual(break_assignments[0]['desk_name'], "休憩")
+        self.assertIn("連続稼働5.0時間後の必須休憩", break_assignments[0]['reason'])
+    
+    def test_break_hour_calculation(self):
+        """休憩時間帯の計算テスト"""
+        constraint = RequiredBreakAfterLongShiftConstraint(
+            long_shift_threshold_hours=5.0,
+            required_break_hours=1.0
+        )
+        
+        # morning (9-12) + evening (17-21) の連続勤務
+        morning_assignment = Assignment("Op1", "Desk A", "morning", self.base_date)
+        evening_assignment = Assignment("Op1", "Desk A", "evening", self.base_date)
+        
+        break_hour = constraint._calculate_break_hour(morning_assignment, evening_assignment)
+        
+        # 連続勤務の真ん中付近（9-21の真ん中 = 15時）を返すことを確認
+        self.assertEqual(break_hour, 15)
 
 if __name__ == '__main__':
     unittest.main() 
