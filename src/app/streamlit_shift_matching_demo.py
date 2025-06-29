@@ -11,7 +11,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from algorithms.da_algorithm import da_match, greedy_match
 from algorithms.multi_slot_da_algorithm import multi_slot_da_match
 from algorithms.constrained_multi_slot_da_algorithm import constrained_multi_slot_da_match
-from models.constraints import create_default_constraints
+from models.constraints import (
+    create_default_constraints, MinRestHoursConstraint, MaxConsecutiveDaysConstraint,
+    MaxWeeklyHoursConstraint, MaxNightShiftsPerWeekConstraint, RequiredDayOffAfterNightConstraint
+)
 
 # ---------- 共通定義 ----------
 HOURS = list(range(9, 18))                      # 9:00〜17:00
@@ -111,6 +114,175 @@ algorithm_choice = st.sidebar.selectbox(
     help="制約付きMulti-slot DAアルゴリズムは労働法規制などの制約を考慮した割り当てを行います"
 )
 
+# ---------- 制約設定 ----------
+if algorithm_choice == "制約付きMulti-slot DAアルゴリズム (推奨)":
+    st.sidebar.header("4️⃣ Hard Constraint設定")
+    
+    # 制約設定の展開/折りたたみ
+    with st.sidebar.expander("制約設定 (クリックで開閉)", expanded=False):
+        st.write("**労働法規制などの制約を設定してください**")
+        
+        # デフォルト値の初期化
+        min_rest_hours = 11.0
+        max_consecutive_days = 6
+        max_weekly_hours = 40.0
+        max_night_shifts_per_week = 2
+        required_day_off_after_night = True
+        enable_min_rest = True
+        enable_consecutive = True
+        enable_weekly_hours = True
+        enable_night_shifts = True
+        enable_day_off_after_night = True
+        
+        # 保存された設定があれば読み込み
+        if "saved_constraints" in st.session_state:
+            saved = st.session_state.saved_constraints
+            min_rest_hours = saved.get("min_rest_hours", 11.0)
+            max_consecutive_days = saved.get("max_consecutive_days", 6)
+            max_weekly_hours = saved.get("max_weekly_hours", 40.0)
+            max_night_shifts_per_week = saved.get("max_night_shifts_per_week", 2)
+            required_day_off_after_night = saved.get("required_day_off_after_night", True)
+            enable_min_rest = saved.get("enable_min_rest", True)
+            enable_consecutive = saved.get("enable_consecutive", True)
+            enable_weekly_hours = saved.get("enable_weekly_hours", True)
+            enable_night_shifts = saved.get("enable_night_shifts", True)
+            enable_day_off_after_night = saved.get("enable_day_off_after_night", True)
+        
+        # 制約設定の保存/読み込み
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 設定を保存"):
+                # セッション状態に制約設定を保存
+                st.session_state.saved_constraints = {
+                    "min_rest_hours": min_rest_hours,
+                    "max_consecutive_days": max_consecutive_days,
+                    "max_weekly_hours": max_weekly_hours,
+                    "max_night_shifts_per_week": max_night_shifts_per_week,
+                    "required_day_off_after_night": required_day_off_after_night,
+                    "enable_min_rest": enable_min_rest,
+                    "enable_consecutive": enable_consecutive,
+                    "enable_weekly_hours": enable_weekly_hours,
+                    "enable_night_shifts": enable_night_shifts,
+                    "enable_day_off_after_night": enable_day_off_after_night
+                }
+                st.success("✅ 設定を保存しました")
+        
+        with col2:
+            if st.button("📂 設定を読み込み"):
+                if "saved_constraints" in st.session_state:
+                    saved = st.session_state.saved_constraints
+                    # 保存された設定を適用（次の実行時に反映）
+                    st.info("📋 保存された設定:")
+                    for key, value in saved.items():
+                        st.write(f"  • {key}: {value}")
+                else:
+                    st.warning("⚠️ 保存された設定がありません")
+        
+        # デフォルト設定に戻すボタン
+        if st.button("🔄 デフォルト設定に戻す"):
+            st.session_state.saved_constraints = None
+            st.success("✅ デフォルト設定に戻しました")
+        
+        st.divider()
+        
+        # 最小休息時間制約
+        st.subheader("🛌 最小休息時間")
+        min_rest_hours = st.slider(
+            "最小休息時間（時間）",
+            min_value=8.0,
+            max_value=16.0,
+            value=min_rest_hours,
+            step=0.5,
+            help="連続する勤務の間に必要な最小休息時間"
+        )
+        
+        # 最大連勤日数制約
+        st.subheader("📅 最大連勤日数")
+        max_consecutive_days = st.slider(
+            "最大連勤日数（日）",
+            min_value=3,
+            max_value=10,
+            value=max_consecutive_days,
+            step=1,
+            help="連続して勤務できる最大日数"
+        )
+        
+        # 最大週間労働時間制約
+        st.subheader("⏰ 最大週間労働時間")
+        max_weekly_hours = st.slider(
+            "最大週間労働時間（時間）",
+            min_value=20.0,
+            max_value=60.0,
+            value=max_weekly_hours,
+            step=1.0,
+            help="1週間あたりの最大労働時間"
+        )
+        
+        # 週間最大夜勤数制約
+        st.subheader("🌙 週間最大夜勤数")
+        max_night_shifts_per_week = st.slider(
+            "週間最大夜勤数（回）",
+            min_value=1,
+            max_value=5,
+            value=max_night_shifts_per_week,
+            step=1,
+            help="1週間あたりの最大夜勤回数"
+        )
+        
+        # 夜勤後の必須休日制約
+        st.subheader("🏖️ 夜勤後の必須休日")
+        required_day_off_after_night = st.checkbox(
+            "夜勤後の翌日を休日とする",
+            value=required_day_off_after_night,
+            help="夜勤の翌日は必ず休日にする"
+        )
+        
+        # 制約の有効/無効設定
+        st.subheader("⚙️ 制約の有効/無効")
+        enable_min_rest = st.checkbox("最小休息時間制約を有効にする", value=enable_min_rest)
+        enable_consecutive = st.checkbox("最大連勤日数制約を有効にする", value=enable_consecutive)
+        enable_weekly_hours = st.checkbox("最大週間労働時間制約を有効にする", value=enable_weekly_hours)
+        enable_night_shifts = st.checkbox("週間最大夜勤数制約を有効にする", value=enable_night_shifts)
+        enable_day_off_after_night = st.checkbox("夜勤後の必須休日制約を有効にする", value=enable_day_off_after_night)
+        
+        # 制約設定のプレビュー
+        st.subheader("📋 制約設定プレビュー")
+        constraints_preview = []
+        if enable_min_rest:
+            constraints_preview.append(f"• 最小休息時間: {min_rest_hours}時間")
+        if enable_consecutive:
+            constraints_preview.append(f"• 最大連勤日数: {max_consecutive_days}日")
+        if enable_weekly_hours:
+            constraints_preview.append(f"• 最大週間労働時間: {max_weekly_hours}時間")
+        if enable_night_shifts:
+            constraints_preview.append(f"• 週間最大夜勤数: {max_night_shifts_per_week}回")
+        if enable_day_off_after_night:
+            constraints_preview.append("• 夜勤後の必須休日: 有効")
+        
+        if constraints_preview:
+            for constraint in constraints_preview:
+                st.write(constraint)
+        else:
+            st.warning("⚠️ 有効な制約が設定されていません")
+    
+    # 制約リストを作成
+    constraints = []
+    if enable_min_rest:
+        constraints.append(MinRestHoursConstraint(min_rest_hours=min_rest_hours))
+    if enable_consecutive:
+        constraints.append(MaxConsecutiveDaysConstraint(max_consecutive_days=max_consecutive_days))
+    if enable_weekly_hours:
+        constraints.append(MaxWeeklyHoursConstraint(max_weekly_hours=max_weekly_hours))
+    if enable_night_shifts:
+        constraints.append(MaxNightShiftsPerWeekConstraint(max_night_shifts_per_week=max_night_shifts_per_week))
+    if enable_day_off_after_night:
+        constraints.append(RequiredDayOffAfterNightConstraint())
+    
+    # 制約が設定されていない場合の警告
+    if not constraints:
+        st.sidebar.warning("⚠️ 制約が設定されていません。デフォルト制約が適用されます。")
+        constraints = create_default_constraints()
+
 # ---------- オペレータ入力 ----------
 st.sidebar.header("2️⃣ オペレータ情報")
 num_ops = st.sidebar.number_input("オペレータ人数", 1, 200, 10)
@@ -150,7 +322,6 @@ if st.button("🛠️  Match & Generate Schedule"):
     # 選択されたアルゴリズムでマッチング
     if algorithm_choice == "制約付きMulti-slot DAアルゴリズム (推奨)":
         # 制約付きMulti-slot DAアルゴリズムを使用
-        constraints = create_default_constraints()
         assignments, schedule = constrained_multi_slot_da_match(pd.DataFrame(req_df.copy()), ops_data, constraints)
         algorithm_name = "制約付きMulti-slot DAアルゴリズム"
         
@@ -165,6 +336,20 @@ if st.button("🛠️  Match & Generate Schedule"):
                 st.write(f"  • {violation}")
         else:
             st.success("✅ すべての制約を満たしています")
+        
+        # 制約設定の詳細表示
+        st.subheader("🔒 適用された制約")
+        constraint_details = []
+        for constraint in constraints:
+            constraint_details.append({
+                "制約タイプ": constraint.constraint_type.value,
+                "説明": constraint.description,
+                "タイプ": "ハード制約" if constraint.is_hard else "ソフト制約"
+            })
+        
+        if constraint_details:
+            constraint_df = pd.DataFrame(constraint_details)
+            st.dataframe(constraint_df, use_container_width=True)
         
         # 割り当て結果の詳細表示
         st.subheader("📋 詳細割り当て結果")
