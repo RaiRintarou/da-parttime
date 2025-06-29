@@ -1,8 +1,8 @@
 """
-Multi-slot日次モデル対応のDAアルゴリズム
+制約を適用したMulti-slot DAアルゴリズム
 
-このモジュールは、時間単位からスロット単位の日次モデルに拡張された
-DA（Deferred Acceptance）アルゴリズムを提供します。
+このモジュールは、Hard Constraint DSLを統合した
+Multi-slot DAアルゴリズムを提供します。
 """
 
 import pandas as pd
@@ -19,15 +19,29 @@ from models.multi_slot_models import (
     DeskRequirement, Assignment, MultiSlotScheduler,
     create_default_slots, convert_hourly_to_slots
 )
+from models.constraints import (
+    Constraint, MinRestHoursConstraint, MaxConsecutiveDaysConstraint,
+    MaxWeeklyHoursConstraint, MaxNightShiftsPerWeekConstraint,
+    RequiredDayOffAfterNightConstraint, ConstraintValidator,
+    create_default_constraints
+)
 
-class MultiSlotDAMatchingAlgorithm:
-    """Multi-slot日次モデル対応のDAアルゴリズム"""
+class ConstrainedMultiSlotDAMatchingAlgorithm:
+    """制約を適用したMulti-slot DAアルゴリズム"""
     
-    def __init__(self, slots: List[TimeSlot], desks: List[str]):
+    def __init__(self, slots: List[TimeSlot], desks: List[str], constraints: Optional[List[Constraint]] = None):
         self.slots = slots
         self.slot_ids = [slot.slot_id for slot in slots]
         self.desks = desks
         self.scheduler = MultiSlotScheduler(slots)
+        
+        # 制約の設定
+        if constraints is None:
+            self.constraints = create_default_constraints()
+        else:
+            self.constraints = constraints
+        
+        self.constraint_validator = ConstraintValidator(self.constraints)
     
     def _create_slot_preferences(self, operators: List[OperatorAvailability]) -> Dict[str, Dict[str, List[str]]]:
         """各デスクの各スロットにおけるオペレータ優先順位を作成"""
@@ -79,22 +93,23 @@ class MultiSlotDAMatchingAlgorithm:
     def match_daily(self, operators: List[OperatorAvailability], 
                    desk_requirements: List[DeskRequirement], 
                    target_date: datetime) -> List[Assignment]:
-        """1日分のDAアルゴリズムによるマッチング実行"""
+        """1日分の制約付きDAアルゴリズムによるマッチング実行"""
         assignments = []
         
         # 各スロットでDAアルゴリズムを実行
         for slot in self.slots:
-            slot_assignments = self._match_slot(
-                operators, desk_requirements, slot.slot_id, target_date
+            slot_assignments = self._match_slot_with_constraints(
+                operators, desk_requirements, slot.slot_id, target_date, assignments
             )
             assignments.extend(slot_assignments)
         
         return assignments
     
-    def _match_slot(self, operators: List[OperatorAvailability], 
-                   desk_requirements: List[DeskRequirement], 
-                   slot_id: str, target_date: datetime) -> List[Assignment]:
-        """特定のスロットでのDAアルゴリズム実行"""
+    def _match_slot_with_constraints(self, operators: List[OperatorAvailability], 
+                                   desk_requirements: List[DeskRequirement], 
+                                   slot_id: str, target_date: datetime,
+                                   existing_assignments: List[Assignment]) -> List[Assignment]:
+        """制約を考慮した特定のスロットでのDAアルゴリズム実行"""
         # このスロットで利用可能なオペレータを取得
         available_ops = [
             op for op in operators 
@@ -138,10 +153,26 @@ class MultiSlotDAMatchingAlgorithm:
                 
                 # そのデスクの要件をチェック
                 if slot_requirements.get(target_desk, 0) > 0:
-                    # デスクに空きがある場合
-                    desk_assignments[target_desk].append(op.operator_name)
-                    matches[op.operator_name] = target_desk
-                    slot_requirements[target_desk] -= 1
+                    # 制約チェック: この割り当てが制約に違反しないかチェック
+                    test_assignment = Assignment(
+                        operator_name=op.operator_name,
+                        desk_name=target_desk,
+                        slot_id=slot_id,
+                        date=target_date
+                    )
+                    
+                    test_assignments = existing_assignments + [test_assignment]
+                    
+                    # 制約違反をチェック
+                    violations = self.constraint_validator.get_violations(test_assignments, operators)
+                    
+                    if not violations:  # 制約違反がない場合のみ割り当て
+                        desk_assignments[target_desk].append(op.operator_name)
+                        matches[op.operator_name] = target_desk
+                        slot_requirements[target_desk] -= 1
+                    else:
+                        # 制約違反がある場合、次のデスクを試す
+                        pass
                 else:
                     # デスクが満杯の場合、優先順位に基づいて競合を解決
                     if desk_assignments[target_desk]:
@@ -163,11 +194,26 @@ class MultiSlotDAMatchingAlgorithm:
                         if op.operator_name in desk_pref and worst_op is not None:
                             new_rank = desk_pref.index(op.operator_name)
                             if new_rank < worst_rank:
-                                # 新しいオペレータの方が優先度が高い場合、置き換え
-                                desk_assignments[target_desk].remove(worst_op)
-                                matches[worst_op] = ""
-                                desk_assignments[target_desk].append(op.operator_name)
-                                matches[op.operator_name] = target_desk
+                                # 制約チェック: 置き換えが制約に違反しないかチェック
+                                test_assignment = Assignment(
+                                    operator_name=op.operator_name,
+                                    desk_name=target_desk,
+                                    slot_id=slot_id,
+                                    date=target_date
+                                )
+                                
+                                # 既存の割り当てから最悪のオペレータを除去
+                                test_assignments = [a for a in existing_assignments 
+                                                   if not (a.operator_name == worst_op and a.slot_id == slot_id and a.date == target_date)]
+                                test_assignments.append(test_assignment)
+                                
+                                violations = self.constraint_validator.get_violations(test_assignments, operators)
+                                
+                                if not violations:  # 制約違反がない場合のみ置き換え
+                                    desk_assignments[target_desk].remove(worst_op)
+                                    matches[worst_op] = ""
+                                    desk_assignments[target_desk].append(op.operator_name)
+                                    matches[op.operator_name] = target_desk
                 
                 proposals[op.operator_name] += 1
         
@@ -188,25 +234,12 @@ class MultiSlotDAMatchingAlgorithm:
     def validate_constraints(self, assignments: List[Assignment], 
                            operators: List[OperatorAvailability]) -> List[str]:
         """制約違反をチェック"""
-        errors = []
-        
-        # 重複チェック
-        assignment_keys = set()
-        for assignment in assignments:
-            key = (assignment.operator_name, assignment.slot_id, assignment.date)
-            if key in assignment_keys:
-                errors.append(f"重複割り当て: {assignment.operator_name} が {assignment.slot_id} に重複して割り当て")
-            assignment_keys.add(key)
-        
-        # 労働時間制約チェック
-        for op in operators:
-            daily_hours = self.scheduler.calculate_work_hours(
-                assignments, op.operator_name, assignments[0].date if assignments else datetime.now()
-            )
-            if daily_hours > op.max_work_hours_per_day:
-                errors.append(f"労働時間超過: {op.operator_name} の労働時間が {daily_hours}h で上限 {op.max_work_hours_per_day}h を超過")
-        
-        return errors
+        return self.constraint_validator.get_violations(assignments, operators)
+    
+    def get_constraint_violations(self, assignments: List[Assignment], 
+                                operators: List['OperatorAvailability']) -> Dict[str, bool]:
+        """各制約の違反状況を取得"""
+        return self.constraint_validator.validate_all(assignments, operators)
 
 def convert_legacy_operators_to_multi_slot(legacy_ops: List[Dict]) -> List[OperatorAvailability]:
     """従来のオペレータデータをMulti-slot形式に変換"""
@@ -243,9 +276,6 @@ def convert_legacy_operators_to_multi_slot(legacy_ops: List[Dict]) -> List[Opera
             # 利用可能なスロットを全て好ましいスロットとして設定
             preferred_slots = available_slots.copy()
         
-        # デバッグ情報を出力
-        print(f"DEBUG: {op_data['name']} - 時間: {start_hour}-{end_hour}, 利用可能スロット: {available_slots}")
-        
         op = OperatorAvailability(
             operator_name=op_data["name"],
             available_slots=available_slots,
@@ -255,9 +285,10 @@ def convert_legacy_operators_to_multi_slot(legacy_ops: List[Dict]) -> List[Opera
     
     return operators
 
-def multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_ops: List[Dict], 
-                       target_date: Optional[datetime] = None) -> Tuple[List[Assignment], pd.DataFrame]:
-    """Multi-slot DAアルゴリズムによるマッチング"""
+def constrained_multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_ops: List[Dict], 
+                                  constraints: Optional[List[Constraint]] = None,
+                                  target_date: Optional[datetime] = None) -> Tuple[List[Assignment], pd.DataFrame]:
+    """制約付きMulti-slot DAアルゴリズムによるマッチング"""
     if target_date is None:
         target_date = datetime.now()
     
@@ -273,8 +304,8 @@ def multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_ops: List[Dict
     # 従来のオペレータデータをMulti-slot形式に変換
     operators = convert_legacy_operators_to_multi_slot(legacy_ops)
     
-    # DAアルゴリズムを実行
-    da_algorithm = MultiSlotDAMatchingAlgorithm(slots, desks)
+    # 制約付きDAアルゴリズムを実行
+    da_algorithm = ConstrainedMultiSlotDAMatchingAlgorithm(slots, desks, constraints)
     assignments = da_algorithm.match_daily(operators, desk_requirements, target_date)
     
     # 結果を従来のDataFrame形式に変換（後方互換性のため）

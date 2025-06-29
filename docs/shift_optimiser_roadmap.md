@@ -17,7 +17,15 @@
   - ✅ Poetry対応の依存関係管理
   - ✅ メインエントリーポイント（main.py）の実装
   - ✅ Makefileによる開発支援コマンド
-- [ ] **Hard constraint DSL** のスケルトン実装（最小休息・連勤上限等）
+- [x] **Hard constraint DSL** のスケルトン実装（最小休息・連勤上限等）
+  - ✅ 制約の基本クラスと具体的な制約クラス実装
+  - ✅ MinRestHoursConstraint, MaxConsecutiveDaysConstraint
+  - ✅ MaxWeeklyHoursConstraint, MaxNightShiftsPerWeekConstraint
+  - ✅ RequiredDayOffAfterNightConstraint
+  - ✅ ConstraintParser, ConstraintValidator実装
+  - ✅ 制約付きMulti-slot DAアルゴリズム統合
+  - ✅ Streamlitアプリへの制約チェック機能追加
+  - ✅ 制約違反検出と警告表示機能
 - [ ] **フェアネス指標 v1**（不人気シフトの分散）
 
 ### 0.2 Ops & QA

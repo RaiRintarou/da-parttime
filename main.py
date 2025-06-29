@@ -23,9 +23,16 @@ if __name__ == "__main__":
         print("🚀 シフトマッチングシステムを起動中...")
         print(f"📁 アプリケーションパス: {app_path}")
         print("🌐 ブラウザで http://localhost:8501 にアクセスしてください")
+        print("📝 ファイルアップロードでエラーが発生した場合は、手動入力オプションを使用してください")
         
-        # Streamlitを起動
-        sys.argv = ["streamlit", "run", app_path, "--server.port=8501"]
+        # Streamlitを起動（設定ファイルを適用）
+        sys.argv = [
+            "streamlit", "run", app_path, 
+            "--server.port=8501",
+            "--server.maxUploadSize=200",
+            "--server.enableCORS=false",
+            "--server.enableXsrfProtection=false"
+        ]
         sys.exit(stcli.main())
     else:
         print(f"❌ エラー: アプリケーションファイルが見つかりません: {app_path}")

@@ -169,7 +169,7 @@ def convert_hourly_to_slots(hourly_requirements: pd.DataFrame) -> List[DeskRequi
         desk_req = DeskRequirement(desk_name=desk_name)
         
         for slot_id, hours in slot_mappings.items():
-            # 各スロットの要件を計算（時間の平均または最大値）
+            # 各スロットの要件を計算（時間の最大値を使用）
             slot_requirements = []
             for hour in hours:
                 if hour < 24:  # 24時間制の範囲内
@@ -179,7 +179,9 @@ def convert_hourly_to_slots(hourly_requirements: pd.DataFrame) -> List[DeskRequi
             
             if slot_requirements:
                 # スロットの要件を設定（最大値を使用）
-                desk_req.set_requirement_for_slot(slot_id, max(slot_requirements))
+                max_requirement = max(slot_requirements)
+                desk_req.set_requirement_for_slot(slot_id, max_requirement)
+                print(f"DEBUG: {desk_name} {slot_id}スロット要件: {max_requirement} (時間: {slot_requirements})")
         
         desk_requirements.append(desk_req)
     
