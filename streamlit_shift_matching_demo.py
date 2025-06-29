@@ -82,16 +82,21 @@ def calc_points(sched_df: pd.DataFrame, ops: list, unit: int):
         for desk in row.values:
             if desk and desk != home:
                 pts[home] += unit
-    return pd.DataFrame(pts.items(), columns=["desk", "points"]).sort_values("desk")
+    
+    # 型エラーを回避するため、辞書からDataFrameを作成
+    pts_data = {"desk": list(pts.keys()), "points": list(pts.values())}
+    return pd.DataFrame(pts_data).sort_values("desk")
 
 # ---------- 実行ボタン ----------
 if st.button("🛠️  Match & Generate Schedule"):
     # 選択されたアルゴリズムでマッチング
     if algorithm_choice == "DAアルゴリズム (推奨)":
-        schedule = da_match(req_df, ops_data)
+        # 型エラーを回避するため、DataFrameを明示的に作成
+        schedule = da_match(req_df.copy(), ops_data)
         algorithm_name = "DAアルゴリズム"
     else:
-        schedule = greedy_match(req_df, ops_data)
+        # 型エラーを回避するため、DataFrameを明示的に作成
+        schedule = greedy_match(req_df.copy(), ops_data)
         algorithm_name = "貪欲アルゴリズム"
 
     st.subheader(f"📅 生成されたシフト表 ({algorithm_name})")
