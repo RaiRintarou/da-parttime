@@ -105,7 +105,17 @@ def test_5day_shift_generation():
         
         # 統合スケジュール表
         print("📅 5日分の統合シフト表:")
-        combined_schedule = pd.concat(all_schedules, axis=1)
+        # 各日のシフト表に日付を追加して列名を一意にする
+        renamed_schedules = []
+        for i, day_schedule in enumerate(all_schedules):
+            day_date = start_date + timedelta(days=i)
+            date_str = day_date.strftime('%m-%d')
+            # 列名に日付を追加
+            renamed_cols = {col: f"{col}_{date_str}" for col in day_schedule.columns}
+            renamed_schedule = day_schedule.rename(columns=renamed_cols)
+            renamed_schedules.append(renamed_schedule)
+        
+        combined_schedule = pd.concat(renamed_schedules, axis=1)
         print(combined_schedule)
         print()
         

@@ -410,7 +410,17 @@ if st.button("🛠️  Match & Generate Schedule"):
         # 5日分のスケジュール表を統合
         if target_days > 1:
             st.subheader(f"📅 {target_days}日分の統合シフト表")
-            combined_schedule = pd.concat(all_schedules, axis=1)
+            # 各日のシフト表に日付を追加して列名を一意にする
+            renamed_schedules = []
+            for i, day_schedule in enumerate(all_schedules):
+                day_date = start_date + timedelta(days=i)
+                date_str = day_date.strftime('%m-%d')
+                # 列名に日付を追加
+                renamed_cols = {col: f"{col}_{date_str}" for col in day_schedule.columns}
+                renamed_schedule = day_schedule.rename(columns=renamed_cols)
+                renamed_schedules.append(renamed_schedule)
+            
+            combined_schedule = pd.concat(renamed_schedules, axis=1)
             st.dataframe(combined_schedule, use_container_width=True)
         else:
             st.subheader("📅 生成されたシフト表")
@@ -452,7 +462,17 @@ if st.button("🛠️  Match & Generate Schedule"):
         # 5日分のスケジュール表を統合
         if target_days > 1:
             st.subheader(f"📅 {target_days}日分の統合シフト表")
-            combined_schedule = pd.concat(all_schedules, axis=1)
+            # 各日のシフト表に日付を追加して列名を一意にする
+            renamed_schedules = []
+            for i, day_schedule in enumerate(all_schedules):
+                day_date = start_date + timedelta(days=i)
+                date_str = day_date.strftime('%m-%d')
+                # 列名に日付を追加
+                renamed_cols = {col: f"{col}_{date_str}" for col in day_schedule.columns}
+                renamed_schedule = day_schedule.rename(columns=renamed_cols)
+                renamed_schedules.append(renamed_schedule)
+            
+            combined_schedule = pd.concat(renamed_schedules, axis=1)
             st.dataframe(combined_schedule, use_container_width=True)
         else:
             st.subheader("📅 生成されたシフト表")
@@ -474,7 +494,17 @@ if st.button("🛠️  Match & Generate Schedule"):
         # 5日分のスケジュール表を統合
         if target_days > 1:
             st.subheader(f"📅 {target_days}日分の統合シフト表")
-            combined_schedule = pd.concat(all_schedules, axis=1)
+            # 各日のシフト表に日付を追加して列名を一意にする
+            renamed_schedules = []
+            for i, day_schedule in enumerate(all_schedules):
+                day_date = start_date + timedelta(days=i)
+                date_str = day_date.strftime('%m-%d')
+                # 列名に日付を追加
+                renamed_cols = {col: f"{col}_{date_str}" for col in day_schedule.columns}
+                renamed_schedule = day_schedule.rename(columns=renamed_cols)
+                renamed_schedules.append(renamed_schedule)
+            
+            combined_schedule = pd.concat(renamed_schedules, axis=1)
             st.dataframe(combined_schedule, use_container_width=True)
             schedule = combined_schedule
         else:
@@ -495,7 +525,17 @@ if st.button("🛠️  Match & Generate Schedule"):
         # 5日分のスケジュール表を統合
         if target_days > 1:
             st.subheader(f"📅 {target_days}日分の統合シフト表")
-            combined_schedule = pd.concat(all_schedules, axis=1)
+            # 各日のシフト表に日付を追加して列名を一意にする
+            renamed_schedules = []
+            for i, day_schedule in enumerate(all_schedules):
+                day_date = start_date + timedelta(days=i)
+                date_str = day_date.strftime('%m-%d')
+                # 列名に日付を追加
+                renamed_cols = {col: f"{col}_{date_str}" for col in day_schedule.columns}
+                renamed_schedule = day_schedule.rename(columns=renamed_cols)
+                renamed_schedules.append(renamed_schedule)
+            
+            combined_schedule = pd.concat(renamed_schedules, axis=1)
             st.dataframe(combined_schedule, use_container_width=True)
             schedule = combined_schedule
         else:
@@ -522,3 +562,15 @@ if st.button("🛠️  Match & Generate Schedule"):
     st.download_button("ポイント集計 CSV DL",
                        csv_pts.getvalue(),
                        file_name=f"points_{start_date.strftime('%Y%m%d')}_{target_days}days_{datetime.now():%Y%m%d_%H%M}.csv")
+
+    # 5日分の場合は個別日のCSVも提供
+    if target_days > 1:
+        st.subheader("📁 個別日のシフト表ダウンロード")
+        for i, day_schedule in enumerate(all_schedules):
+            day_date = start_date + timedelta(days=i)
+            csv_individual = StringIO(); day_schedule.to_csv(csv_individual)
+            st.download_button(
+                f"{day_date.strftime('%Y-%m-%d')} シフト表 CSV DL",
+                csv_individual.getvalue(),
+                file_name=f"shift_{day_date.strftime('%Y%m%d')}_{datetime.now():%Y%m%d_%H%M}.csv"
+            )
