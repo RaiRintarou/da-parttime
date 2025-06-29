@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from io import StringIO
-from datetime import datetime
+from datetime import datetime, timedelta
 import sys
 import os
 
@@ -114,9 +114,39 @@ algorithm_choice = st.sidebar.selectbox(
     help="制約付きMulti-slot DAアルゴリズムは労働法規制などの制約を考慮した割り当てを行います"
 )
 
+# ---------- シフト期間設定 ----------
+st.sidebar.header("4️⃣ シフト期間設定")
+shift_period = st.sidebar.selectbox(
+    "シフト期間",
+    ["1日", "5日連続", "カスタム"],
+    help="生成するシフトの期間を選択してください"
+)
+
+# カスタム期間の設定
+if shift_period == "カスタム":
+    custom_days = st.sidebar.number_input(
+        "日数",
+        min_value=1,
+        max_value=30,
+        value=5,
+        help="生成するシフトの日数を指定してください"
+    )
+    target_days = custom_days
+elif shift_period == "5日連続":
+    target_days = 5
+else:
+    target_days = 1
+
+# 開始日設定
+start_date = st.sidebar.date_input(
+    "開始日",
+    value=datetime.now().date(),
+    help="シフトの開始日を選択してください"
+)
+
 # ---------- 制約設定 ----------
 if algorithm_choice == "制約付きMulti-slot DAアルゴリズム (推奨)":
-    st.sidebar.header("4️⃣ Hard Constraint設定")
+    st.sidebar.header("5️⃣ Hard Constraint設定")
     
     # 制約設定の展開/折りたたみ
     with st.sidebar.expander("制約設定 (クリックで開閉)", expanded=False):
@@ -322,13 +352,23 @@ if st.button("🛠️  Match & Generate Schedule"):
     # 選択されたアルゴリズムでマッチング
     if algorithm_choice == "制約付きMulti-slot DAアルゴリズム (推奨)":
         # 制約付きMulti-slot DAアルゴリズムを使用
-        assignments, schedule = constrained_multi_slot_da_match(pd.DataFrame(req_df.copy()), ops_data, constraints)
+        all_assignments = []
+        all_schedules = []
+        
+        for day in range(target_days):
+            current_date = datetime.combine(start_date, datetime.min.time()) + timedelta(days=day)
+            assignments, schedule = constrained_multi_slot_da_match(
+                pd.DataFrame(req_df.copy()), ops_data, constraints, current_date
+            )
+            all_assignments.extend(assignments)
+            all_schedules.append(schedule)
+        
         algorithm_name = "制約付きMulti-slot DAアルゴリズム"
         
-        # 制約違反チェック
+        # 制約違反チェック（全期間）
         from models.constraints import ConstraintValidator
         validator = ConstraintValidator(constraints)
-        violations = validator.get_violations(assignments, [])
+        violations = validator.get_violations(all_assignments, [])
         
         if violations:
             st.warning("⚠️ 制約違反が検出されました:")
@@ -354,7 +394,7 @@ if st.button("🛠️  Match & Generate Schedule"):
         # 割り当て結果の詳細表示
         st.subheader("📋 詳細割り当て結果")
         assignment_data = []
-        for assignment in assignments:
+        for assignment in all_assignments:
             assignment_data.append({
                 "オペレータ": assignment.operator_name,
                 "デスク": assignment.desk_name,
@@ -367,15 +407,36 @@ if st.button("🛠️  Match & Generate Schedule"):
             assignment_df = pd.DataFrame(assignment_data)
             st.dataframe(assignment_df, use_container_width=True)
         
+        # 5日分のスケジュール表を統合
+        if target_days > 1:
+            st.subheader(f"📅 {target_days}日分の統合シフト表")
+            combined_schedule = pd.concat(all_schedules, axis=1)
+            st.dataframe(combined_schedule, use_container_width=True)
+        else:
+            st.subheader("📅 生成されたシフト表")
+            st.dataframe(all_schedules[0], use_container_width=True)
+        
+        schedule = all_schedules[0] if target_days == 1 else combined_schedule
+        
     elif algorithm_choice == "Multi-slot DAアルゴリズム":
         # Multi-slot DAアルゴリズムを使用
-        assignments, schedule = multi_slot_da_match(pd.DataFrame(req_df.copy()), ops_data)
+        all_assignments = []
+        all_schedules = []
+        
+        for day in range(target_days):
+            current_date = datetime.combine(start_date, datetime.min.time()) + timedelta(days=day)
+            assignments, schedule = multi_slot_da_match(
+                pd.DataFrame(req_df.copy()), ops_data, current_date
+            )
+            all_assignments.extend(assignments)
+            all_schedules.append(schedule)
+        
         algorithm_name = "Multi-slot DAアルゴリズム"
         
         # 割り当て結果の詳細表示
         st.subheader("📋 詳細割り当て結果")
         assignment_data = []
-        for assignment in assignments:
+        for assignment in all_assignments:
             assignment_data.append({
                 "オペレータ": assignment.operator_name,
                 "デスク": assignment.desk_name,
@@ -388,17 +449,65 @@ if st.button("🛠️  Match & Generate Schedule"):
             assignment_df = pd.DataFrame(assignment_data)
             st.dataframe(assignment_df, use_container_width=True)
         
+        # 5日分のスケジュール表を統合
+        if target_days > 1:
+            st.subheader(f"📅 {target_days}日分の統合シフト表")
+            combined_schedule = pd.concat(all_schedules, axis=1)
+            st.dataframe(combined_schedule, use_container_width=True)
+        else:
+            st.subheader("📅 生成されたシフト表")
+            st.dataframe(all_schedules[0], use_container_width=True)
+        
+        schedule = all_schedules[0] if target_days == 1 else combined_schedule
+        
     elif algorithm_choice == "DAアルゴリズム":
         # 従来のDAアルゴリズムを使用
-        schedule = da_match(pd.DataFrame(req_df.copy()), ops_data)
+        all_schedules = []
+        
+        for day in range(target_days):
+            current_date = datetime.combine(start_date, datetime.min.time()) + timedelta(days=day)
+            schedule = da_match(pd.DataFrame(req_df.copy()), ops_data)
+            all_schedules.append(schedule)
+        
         algorithm_name = "DAアルゴリズム"
+        
+        # 5日分のスケジュール表を統合
+        if target_days > 1:
+            st.subheader(f"📅 {target_days}日分の統合シフト表")
+            combined_schedule = pd.concat(all_schedules, axis=1)
+            st.dataframe(combined_schedule, use_container_width=True)
+            schedule = combined_schedule
+        else:
+            st.subheader("📅 生成されたシフト表")
+            st.dataframe(all_schedules[0], use_container_width=True)
+            schedule = all_schedules[0]
     else:
         # 貪欲アルゴリズムを使用
-        schedule = greedy_match(pd.DataFrame(req_df.copy()), ops_data)
+        all_schedules = []
+        
+        for day in range(target_days):
+            current_date = datetime.combine(start_date, datetime.min.time()) + timedelta(days=day)
+            schedule = greedy_match(pd.DataFrame(req_df.copy()), ops_data)
+            all_schedules.append(schedule)
+        
         algorithm_name = "貪欲アルゴリズム"
+        
+        # 5日分のスケジュール表を統合
+        if target_days > 1:
+            st.subheader(f"📅 {target_days}日分の統合シフト表")
+            combined_schedule = pd.concat(all_schedules, axis=1)
+            st.dataframe(combined_schedule, use_container_width=True)
+            schedule = combined_schedule
+        else:
+            st.subheader("📅 生成されたシフト表")
+            st.dataframe(all_schedules[0], use_container_width=True)
+            schedule = all_schedules[0]
 
-    st.subheader(f"📅 生成されたシフト表 ({algorithm_name})")
-    st.dataframe(schedule, use_container_width=True)
+    # 期間情報の表示
+    st.subheader(f"📊 シフト情報")
+    st.write(f"**期間**: {start_date.strftime('%Y-%m-%d')} から {target_days}日間")
+    st.write(f"**アルゴリズム**: {algorithm_name}")
+    st.write(f"**生成日数**: {target_days}日")
 
     pt_df = calc_points(schedule, ops_data, point_unit)
     st.subheader("🏅 デスク別ポイント補填")
@@ -407,9 +516,9 @@ if st.button("🛠️  Match & Generate Schedule"):
     csv_sched = StringIO(); schedule.to_csv(csv_sched)
     st.download_button("シフト表 CSV DL",
                        csv_sched.getvalue(),
-                       file_name=f"shift_{datetime.now():%Y%m%d_%H%M}.csv")
+                       file_name=f"shift_{start_date.strftime('%Y%m%d')}_{target_days}days_{datetime.now():%Y%m%d_%H%M}.csv")
 
     csv_pts = StringIO(); pt_df.to_csv(csv_pts, index=False)
     st.download_button("ポイント集計 CSV DL",
                        csv_pts.getvalue(),
-                       file_name=f"points_{datetime.now():%Y%m%d_%H%M}.csv")
+                       file_name=f"points_{start_date.strftime('%Y%m%d')}_{target_days}days_{datetime.now():%Y%m%d_%H%M}.csv")
