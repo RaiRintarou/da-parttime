@@ -20,7 +20,7 @@ install:
 # テストの実行
 test:
 	@echo "🧪 テストを実行中..."
-	poetry run pytest tests/ -v
+	poetry run pytest
 
 # アプリケーションの起動
 run:

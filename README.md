@@ -19,98 +19,94 @@
 - **シフト表・ポイント集計CSV出力**: 期間統合・個別日ごとにダウンロード可
 - **サンプル/テンプレートCSVのDL**: デスク・オペレーター両方に対応
 
-## ファイル構成（2024/12/19時点）
+## ファイル構成（2024/06/XX時点・現状）
 
 ```
 da_parttime/
-├── main.py
-├── Makefile
-├── pyproject.toml
-├── poetry.lock
-├── README.md
-│
-├── src/
-│   ├── __init__.py
-│   ├── app/
-│   │   ├── __init__.py
-│   │   └── streamlit_shift_matching_demo.py
-│   ├── algorithms/
-│   │   ├── __init__.py
-│   │   ├── da_algorithm.py
-│   │   ├── multi_slot_da_algorithm.py
-│   │   └── constrained_multi_slot_da_algorithm.py
-│   └── models/
-│       ├── __init__.py
-│       ├── multi_slot_models.py
-│       └── constraints.py
-│
-├── tests/
-│   ├── __init__.py
-│   ├── test_multi_slot_models.py
-│   ├── test_constraints.py
-│   ├── test_5day_shift.py
-│   ├── test_operator_csv.py
-│   ├── test_constraint_ui.py
-│   ├── test_constrained_algorithm.py
-│   ├── test_multi_slot_debug.py
-│   └── test_consecutive_break_constraint.py
-│
-├── data/
-│   ├── shifts/
-│   │   ├── シフト表.csv
-│   │   ├── シフト表.numbers
-│   │   └── 名称未設定.csv
-│   └── operators/
-│       ├── operators_default.csv
-│       └── operators_template.csv
-│
-└── docs/
-    └── shift_optimiser_roadmap.md
+  ├── data/
+  │   ├── operators/
+  │   │   └── operators_default.csv
+  │   └── shifts/
+  │       ├── シフト表.csv
+  │       └── シフト表.numbers
+  ├── demo_consecutive_break.py
+  ├── docs/
+  │   └── shift_optimiser_roadmap.md
+  ├── main.py
+  ├── Makefile
+  ├── performance_test.py
+  ├── poetry.lock
+  ├── pyproject.toml
+  ├── README.md
+  ├── src/
+  │   ├── __init__.py
+  │   ├── algorithms/
+  │   │   ├── __init__.py
+  │   │   ├── constrained_multi_slot_da_algorithm.py
+  │   │   ├── da_algorithm.py
+  │   │   └── multi_slot_da_algorithm.py
+  │   ├── app/
+  │   │   ├── __init__.py
+  │   │   └── streamlit_shift_matching_demo.py
+  │   ├── models/
+  │   │   ├── __init__.py
+  │   │   ├── constraints.py
+  │   │   └── multi_slot_models.py
+  │   └── utils/
+  │       ├── __init__.py
+  │       ├── algorithm_executor.py
+  │       ├── constants.py
+  │       ├── constraint_manager.py
+  │       ├── csv_utils.py
+  │       ├── data_converter.py
+  │       ├── point_calculator.py
+  │       ├── schedule_converter.py
+  │       └── ui_components.py
+  ├── test_break_display.py
+  ├── tests/
+  │   ├── __init__.py
+  │   └── test_integrated.py
 ```
 
 ## 主要ファイル・ディレクトリの説明
 
 ### ルート直下
-- **main.py**: アプリケーションのエントリーポイント
-- **Makefile**: ビルド・実行・テスト・フォーマット等のコマンド集
-- **pyproject.toml / poetry.lock**: Poetryによる依存管理
-- **README.md**: 本ファイル
-
-### src/
-- **app/**
-  - `streamlit_shift_matching_demo.py`: Web UI本体。デスク・オペレーターCSV入出力、制約設定、アルゴリズム選択、シフト生成・DLまで一括管理。
-- **algorithms/**
-  - `da_algorithm.py`: 時間単位DAアルゴリズム（後方互換）
-  - `multi_slot_da_algorithm.py`: スロット単位DAアルゴリズム
-  - `constrained_multi_slot_da_algorithm.py`: 制約付きスロットDAアルゴリズム
-- **models/**
-  - `multi_slot_models.py`: スロット・オペレーター・割当等のデータ構造
-  - `constraints.py`: 制約DSL・バリデーション・各種制約クラス
-
-### tests/
-- `test_multi_slot_models.py`: モデル・アルゴリズムのユニットテスト
-- `test_constraints.py`: 制約ロジックのテスト
-- `test_5day_shift.py`: 5日分シフト生成の動作確認
-- `test_operator_csv.py`: オペレーターCSV読み込みの動作確認
-- `test_constraint_ui.py`: 制約UIテスト
-- `test_constrained_algorithm.py`: 制約付きアルゴリズムテスト
-- `test_multi_slot_debug.py`: デバッグ用テスト
-- `test_consecutive_break_constraint.py`: 連続スロット後の必須休憩制約テスト
-
-### パフォーマンス関連
-- `performance_test.py`: シフト生成パフォーマンスの測定・分析
+- **main.py**: アプリケーションのエントリーポイント。
+- **Makefile**: ビルド・実行・テスト・フォーマット等のコマンド集。
+- **pyproject.toml / poetry.lock**: Poetryによる依存管理ファイル。
+- **README.md**: 本ファイル。
+- **performance_test.py**: シフト生成パフォーマンスの測定・分析用スクリプト。
+- **test_break_display.py**: 休憩表示に関するテストスクリプト。
 
 ### data/
-- **shifts/**
-  - `シフト表.csv`: デスク要員数サンプル
-  - `シフト表.numbers`: デスク要員数サンプル（Numbers形式）
-  - `名称未設定.csv`: デスク要員数サンプル
-- **operators/**
-  - `operators_default.csv`: オペレーターサンプル
-  - `operators_template.csv`: オペレーターCSVテンプレート
+- **operators/operators_default.csv**: オペレーターサンプルデータ。
+- **shifts/シフト表.csv, シフト表.numbers**: デスク要員数サンプル。
 
 ### docs/
-- `shift_optimiser_roadmap.md`: 開発ロードマップ
+- **shift_optimiser_roadmap.md**: 開発ロードマップ。
+
+### src/
+- **algorithms/**
+  - `da_algorithm.py`: 時間単位DAアルゴリズム（後方互換）。
+  - `multi_slot_da_algorithm.py`: スロット単位DAアルゴリズム。
+  - `constrained_multi_slot_da_algorithm.py`: 制約付きスロットDAアルゴリズム。
+- **app/**
+  - `streamlit_shift_matching_demo.py`: Web UI本体。デスク・オペレーターCSV入出力、制約設定、アルゴリズム選択、シフト生成・DLまで一括管理。
+- **models/**
+  - `multi_slot_models.py`: スロット・オペレーター・割当等のデータ構造。
+  - `constraints.py`: 制約DSL・バリデーション・各種制約クラス。
+- **utils/**
+  - `algorithm_executor.py`: アルゴリズム実行補助。
+  - `constants.py`: 定数定義。
+  - `constraint_manager.py`: 制約管理ロジック。
+  - `csv_utils.py`: CSV入出力ユーティリティ。
+  - `data_converter.py`: データ変換ユーティリティ。
+  - `point_calculator.py`: ポイント計算ロジック。
+  - `schedule_converter.py`: スケジュールデータ変換。
+  - `ui_components.py`: UI部品。
+
+### tests/
+- `test_integrated.py`: 統合テスト。
 
 ## 使い方
 
@@ -128,9 +124,7 @@ poetry run python main.py
 
 ### 3. テスト実行
 ```bash
-make test
-# または
-poetry run pytest tests/ -v
+poetry run pytest
 ```
 
 ### 4. パフォーマンステスト実行

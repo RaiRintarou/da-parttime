@@ -26,10 +26,9 @@
   - ✅ 制約付きMulti-slot DAアルゴリズム統合
   - ✅ Streamlitアプリへの制約チェック機能追加
   - ✅ 制約違反検出と警告表示機能
-- [ ] **フェアネス指標 v1**（不人気シフトの分散）
 
 ### 0.2 Ops & QA
-- [ ] `pytest` 導入・GitHub Actions で **CI テンプレート**（coverage>60%）
+- [x] `pytest` 導入・GitHub Actions で **CI テンプレート**（coverage>60%）
 - [ ] **Dockerfile（dev）** 作成、VS Code Dev Container 対応  
 - [ ] **PoC 環境用 secrets** を `.env` + direnv で集中管理
 

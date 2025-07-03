@@ -11,11 +11,8 @@ import time
 import pandas as pd
 from datetime import datetime
 
-# プロジェクトルートをパスに追加
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
-
-from models.constraints import RequiredBreakAfterConsecutiveSlotsConstraint
-from algorithms.constrained_multi_slot_da_algorithm import constrained_multi_slot_da_match
+from src.models.constraints import RequiredBreakAfterConsecutiveSlotsConstraint
+from src.algorithms.constrained_multi_slot_da_algorithm import constrained_multi_slot_da_match
 
 
 def create_test_data(operator_count: int, desk_count: int) -> tuple:
@@ -66,7 +63,7 @@ def performance_test():
             max_consecutive_slots=5,
             break_desk_name="休憩"
         )
-    ]
+    ]  # type: ignore
     
     results = []
     
@@ -86,7 +83,7 @@ def performance_test():
             assignments, schedule = constrained_multi_slot_da_match(
                 hourly_requirements=req_df,
                 legacy_ops=ops_data,
-                constraints=constraints,
+                constraints=constraints,  # type: ignore
                 target_date=datetime.now()
             )
             

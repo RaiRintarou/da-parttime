@@ -81,14 +81,33 @@ class MinRestHoursConstraint(Constraint):
     
     def _calculate_rest_hours(self, current: 'Assignment', next_shift: 'Assignment') -> float:
         """休息時間を計算"""
-        # 1時間単位のスロットタイプに基づいて終了時刻を推定
-        current_hour = int(current.slot_id[1:]) if current.slot_id.startswith('h') else 9
-        next_hour = int(next_shift.slot_id[1:]) if next_shift.slot_id.startswith('h') else 9
-        
-        current_end = current_hour + 1  # スロットの終了時刻
-        next_start = next_hour  # 次のスロットの開始時刻
-        
-        # 正しい休息時間計算（翌日の開始時刻 - 前日の終了時刻、負なら+24）
+        # スロットIDごとの開始・終了時刻定義
+        slot_times = {
+            "morning": (9, 13),
+            "afternoon": (13, 17),
+            "evening": (17, 21),
+            "night": (22, 6),
+        }
+        # 1時間単位スロット
+        if current.slot_id.startswith('h'):
+            current_hour = int(current.slot_id[1:])
+            current_end = current_hour + 1
+        elif current.slot_id in slot_times:
+            current_end = slot_times[current.slot_id][1]
+        else:
+            current_end = 9 + 1
+        if next_shift.slot_id.startswith('h'):
+            next_hour = int(next_shift.slot_id[1:])
+            next_start = next_hour
+        elif next_shift.slot_id in slot_times:
+            next_start = slot_times[next_shift.slot_id][0]
+        else:
+            next_start = 9
+        # 夜勤（22-6時）の場合、翌朝6時終了
+        if current.slot_id == "night":
+            current_end = 6
+        if next_shift.slot_id == "night":
+            next_start = 22
         rest_hours = (next_start - current_end) % 24
         return rest_hours
 
@@ -146,8 +165,15 @@ class MaxWeeklyHoursConstraint(Constraint):
         """最大週間労働時間制約の検証"""
         from .multi_slot_models import Assignment
         
-        # 1時間単位のスロットの時間定義
+        # スロットIDごとの労働時間定義
         slot_hours = {f"h{hour:02d}": 1.0 for hour in range(9, 18)}
+        # 追加: 代表的なスロット名も対応
+        slot_hours.update({
+            "morning": 4.0,   # 例: 9-13時
+            "afternoon": 4.0, # 例: 13-17時
+            "evening": 4.0,   # 例: 17-21時
+            "night": 8.0      # 例: 22-6時
+        })
         
         for operator in operators:
             op_assignments = [a for a in assignments if a.operator_name == operator.operator_name]
@@ -540,26 +566,24 @@ class ConstraintParser:
     
     def __init__(self):
         self.constraint_patterns = {
-            r'min_rest_hours\s*=\s*(\d+(?:\.\d+)?)': self._parse_min_rest_hours,
-            r'max_consecutive_days\s*=\s*(\d+)': self._parse_max_consecutive_days,
-            r'max_weekly_hours\s*=\s*(\d+(?:\.\d+)?)': self._parse_max_weekly_hours,
-            r'max_night_shifts_per_week\s*=\s*(\d+)': self._parse_max_night_shifts,
-            r'required_day_off_after_night': self._parse_required_day_off_after_night,
+            r'max_consecutive_days\s*[:=]\s*(\d+)': self._parse_max_consecutive_days,
+            r'max_weekly_hours\s*[:=]\s*(\d+(?:\.\d+)?)': self._parse_max_weekly_hours,
+            r'max_night_shifts_per_week\s*[:=]\s*(\d+)': self._parse_max_night_shifts,
+            r'required_break_after_long_shift\s*[:=]\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)': self._parse_required_break_after_long_shift,
+            r'required_break_after_consecutive_slots\s*[:=]\s*(\d+)': self._parse_required_break_after_consecutive_slots,
         }
     
     def parse_constraints(self, constraint_text: str) -> List[Constraint]:
         """制約テキストを解析して制約リストを生成"""
         constraints = []
         
-        # 各制約タイプの正規表現パターン
+        # 各制約タイプの正規表現パターン（: または = に対応）
         patterns = [
-            (r'min_rest_hours\s*=\s*(\d+(?:\.\d+)?)', self._parse_min_rest_hours),
-            (r'max_consecutive_days\s*=\s*(\d+)', self._parse_max_consecutive_days),
-            (r'max_weekly_hours\s*=\s*(\d+(?:\.\d+)?)', self._parse_max_weekly_hours),
-            (r'max_night_shifts_per_week\s*=\s*(\d+)', self._parse_max_night_shifts),
-            (r'required_day_off_after_night\s*=\s*true', self._parse_required_day_off_after_night),
-            (r'required_break_after_long_shift\s*=\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)', self._parse_required_break_after_long_shift),
-            (r'required_break_after_consecutive_slots\s*=\s*(\d+)', self._parse_required_break_after_consecutive_slots),
+            (r'max_consecutive_days\s*[:=]\s*(\d+)', self._parse_max_consecutive_days),
+            (r'max_weekly_hours\s*[:=]\s*(\d+(?:\.\d+)?)', self._parse_max_weekly_hours),
+            (r'max_night_shifts_per_week\s*[:=]\s*(\d+)', self._parse_max_night_shifts),
+            (r'required_break_after_long_shift\s*[:=]\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)', self._parse_required_break_after_long_shift),
+            (r'required_break_after_consecutive_slots\s*[:=]\s*(\d+)', self._parse_required_break_after_consecutive_slots),
         ]
         
         for pattern, parser_func in patterns:
@@ -570,10 +594,6 @@ class ConstraintParser:
                     constraints.append(constraint)
         
         return constraints
-    
-    def _parse_min_rest_hours(self, match) -> Constraint:
-        hours = float(match.group(1))
-        return MinRestHoursConstraint(min_rest_hours=hours)
     
     def _parse_max_consecutive_days(self, match) -> Constraint:
         days = int(match.group(1))
@@ -586,10 +606,6 @@ class ConstraintParser:
     def _parse_max_night_shifts(self, match) -> Constraint:
         shifts = int(match.group(1))
         return MaxNightShiftsPerWeekConstraint(max_night_shifts_per_week=shifts)
-    
-    def _parse_required_day_off_after_night(self, match) -> Constraint:
-        """夜勤後の必須休日制約をパース"""
-        return RequiredDayOffAfterNightConstraint()
     
     def _parse_required_break_after_long_shift(self, match) -> Constraint:
         """長時間シフト後の必須休憩制約をパース"""
@@ -668,11 +684,9 @@ class ConstraintValidator:
 def create_default_constraints() -> List[Constraint]:
     """デフォルトの制約セットを作成"""
     return [
-        MinRestHoursConstraint(min_rest_hours=11.0),
         MaxConsecutiveDaysConstraint(max_consecutive_days=6),
         MaxWeeklyHoursConstraint(max_weekly_hours=40.0),
         MaxNightShiftsPerWeekConstraint(max_night_shifts_per_week=2),
-        RequiredDayOffAfterNightConstraint(),
         RequiredBreakAfterLongShiftConstraint(long_shift_threshold_hours=5.0, required_break_hours=1.0),
         RequiredBreakAfterConsecutiveSlotsConstraint(max_consecutive_slots=5, break_desk_name="休憩"),
     ]
@@ -680,9 +694,8 @@ def create_default_constraints() -> List[Constraint]:
 # 制約DSLのサンプル
 DEFAULT_CONSTRAINT_DSL = """
 # シフト制約定義
-min_rest_hours = 11.0
 max_consecutive_days = 6
 max_weekly_hours = 40.0
 max_night_shifts_per_week = 2
-required_day_off_after_night
+required_break_after_long_shift 5.0, 1.0
 """ 
