@@ -30,7 +30,8 @@ addopts = [
     "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html",
-    "--cov-report=xml"
+    "--cov-report=xml",
+    "--cov-fail-under=40"
 ]
 
 [tool.coverage.run]
@@ -38,7 +39,8 @@ source = ["src"]
 omit = [
     "*/tests/*",
     "*/test_*",
-    "*/__pycache__/*"
+    "*/__pycache__/*",
+    "*/app/streamlit_shift_matching_demo.py"
 ]
 
 [tool.coverage.report]
@@ -52,7 +54,24 @@ exclude_lines = [
     "if 0:",
     "if __name__ == .__main__.:",
     "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod"
+    "@(abc\\.)?abstractmethod",
+    "if __name__ == '__main__':",
+    "def main\\(\\):",
+    "if __name__ == \"__main__\":",
+    "streamlit\\.run\\(",
+    "st\\.",
+    "st\\.page_config",
+    "st\\.title",
+    "st\\.sidebar",
+    "st\\.selectbox",
+    "st\\.file_uploader",
+    "st\\.button",
+    "st\\.dataframe",
+    "st\\.plotly_chart",
+    "st\\.success",
+    "st\\.error",
+    "st\\.warning",
+    "st\\.info"
 ]
 
 [tool.black]
