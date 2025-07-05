@@ -1,39 +1,63 @@
 #!/usr/bin/env python3
 """
-シフトマッチングシステム - メインエントリーポイント
+Shift Optimiser PoC - メインエントリーポイント
 
-このファイルは、アプリケーションを起動するためのメインエントリーポイントです。
+このモジュールは、シフト最適化システムのメインエントリーポイントです。
+設定の初期化、ログシステムのセットアップ、アプリケーションの起動を行います。
+
+主な機能:
+- 環境設定の読み込み
+- ログシステムの初期化
+- Streamlitアプリケーションの起動
+- エラーハンドリング
 """
 
 import sys
-import os
+import traceback
+from pathlib import Path
 
-# プロジェクトルートをパスに追加
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# プロジェクトルートをPythonパスに追加
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+
+from src.utils.config import get_config
+from src.utils.logger import setup_logging, get_logger
+
+
+def main():
+    """メイン関数"""
+    try:
+        # 設定を読み込み
+        config = get_config()
+        
+        # ログシステムを初期化
+        setup_logging()
+        logger = get_logger(__name__)
+        
+        logger.info("Shift Optimiser PoC を起動しています...")
+        logger.info(f"アプリケーション名: {config.app_name}")
+        logger.info(f"バージョン: {config.app_version}")
+        logger.info(f"デバッグモード: {config.debug}")
+        
+        # Streamlitアプリケーションを起動
+        import streamlit as st
+        from src.app.streamlit_shift_matching_demo import main as streamlit_main
+        
+        logger.info("Streamlitアプリケーションを起動しています...")
+        streamlit_main()
+        
+    except Exception as e:
+        # エラーログを出力
+        error_logger = get_logger("error")
+        error_logger.error(f"アプリケーション起動エラー: {str(e)}")
+        error_logger.error(f"詳細: {traceback.format_exc()}")
+        
+        # コンソールにもエラーを出力
+        print(f"エラーが発生しました: {str(e)}")
+        print("詳細はログファイルを確認してください。")
+        
+        sys.exit(1)
+
 
 if __name__ == "__main__":
-    # Streamlitアプリを起動
-    import subprocess
-    import streamlit.web.cli as stcli
-    
-    # src/app/streamlit_shift_matching_demo.pyを起動
-    app_path = os.path.join("src", "app", "streamlit_shift_matching_demo.py")
-    
-    if os.path.exists(app_path):
-        print("🚀 シフトマッチングシステムを起動中...")
-        print(f"📁 アプリケーションパス: {app_path}")
-        print("🌐 ブラウザで http://localhost:8501 にアクセスしてください")
-        print("📝 ファイルアップロードでエラーが発生した場合は、手動入力オプションを使用してください")
-        
-        # Streamlitを起動（設定ファイルを適用）
-        sys.argv = [
-            "streamlit", "run", app_path, 
-            "--server.port=8501",
-            "--server.maxUploadSize=200",
-            "--server.enableCORS=false",
-            "--server.enableXsrfProtection=false"
-        ]
-        sys.exit(stcli.main())
-    else:
-        print(f"❌ エラー: アプリケーションファイルが見つかりません: {app_path}")
-        sys.exit(1) 
+    main() 

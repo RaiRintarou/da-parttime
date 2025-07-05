@@ -1,0 +1,18 @@
+{
+  // 開発用Dev Container設定
+  "name": "Shift Optimiser DevContainer",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspace",
+  "forwardPorts": [8000],
+  "envFile": ".env",
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-azuretools.vscode-docker",
+    "charliermarsh.ruff",
+    "njpwerner.autodocstring"
+  ]
+} 

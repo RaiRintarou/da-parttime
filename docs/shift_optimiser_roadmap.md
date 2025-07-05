@@ -29,8 +29,8 @@
 
 ### 0.2 Ops & QA
 - [x] `pytest` 導入・GitHub Actions で **CI テンプレート**（coverage>60%）
-- [ ] **Dockerfile（dev）** 作成、VS Code Dev Container 対応  
-- [ ] **PoC 環境用 secrets** を `.env` + direnv で集中管理
+- [x] **Dockerfile（dev）** 作成、VS Code Dev Container 対応  
+- [x] **PoC 環境用 secrets** を `.env` + direnv で集中管理
 
 ---
 

@@ -1,8 +1,13 @@
 """
-ユーティリティモジュール
+ユーティリティパッケージ
 
-シフトマッチングシステムで使用する共通機能を提供します。
+このパッケージは、アプリケーション全体で使用される共通機能を提供します。
+設定管理、ログ機能、データ変換、CSV操作などのユーティリティが含まれています。
 """
+
+# 設定管理とログ機能
+from .config import get_config, reload_config, AppConfig
+from .logger import setup_logging, get_logger, log_extra_fields
 
 from .schedule_converter import (
     convert_to_operator_schedule,
@@ -44,6 +49,14 @@ from .algorithm_executor import AlgorithmExecutor
 from .constraint_manager import ConstraintManager
 
 __all__ = [
+    # 設定管理とログ機能
+    'get_config',
+    'reload_config',
+    'AppConfig',
+    'setup_logging',
+    'get_logger',
+    'log_extra_fields',
+    
     # スケジュール変換機能
     'convert_to_operator_schedule',
     'convert_multi_slot_to_operator_schedule', 
