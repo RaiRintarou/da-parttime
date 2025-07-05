@@ -158,7 +158,8 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
         
         # 各スロットでDAアルゴリズムを実行
         for slot in self.slots:
-            print(f"DEBUG: スロット {slot.slot_id} のマッチング開始")
+            # デバッグ出力を削減（パフォーマンス向上）
+            # print(f"DEBUG: スロット {slot.slot_id} のマッチング開始")
             
             # 初期マッチングを実行
             slot_assignments = self._match_slot_with_constraints(
@@ -167,12 +168,12 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
             assignments.extend(slot_assignments)
             
             # 要員不足解消プロセスを実行
-            print(f"DEBUG: スロット {slot.slot_id} の要員不足解消プロセス開始")
+            # print(f"DEBUG: スロット {slot.slot_id} の要員不足解消プロセス開始")
             assignments = self._optimize_assignments_for_shortage(
                 assignments, operators, desk_requirements, slot.slot_id, target_date
             )
             
-            print(f"DEBUG: スロット {slot.slot_id} のマッチング完了 - 割り当て数: {len([a for a in assignments if a.slot_id == slot.slot_id])}")
+            # print(f"DEBUG: スロット {slot.slot_id} のマッチング完了 - 割り当て数: {len([a for a in assignments if a.slot_id == slot.slot_id])}")
         
         return assignments
     
@@ -198,7 +199,8 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
         if self.constraints:
             consecutive_break_constraint = next((c for c in self.constraints 
                                                if isinstance(c, RequiredBreakAfterConsecutiveSlotsConstraint)), None)
-            print(f"DEBUG: 制約チェック - 制約数: {len(self.constraints)}, 連続スロット制約: {consecutive_break_constraint is not None}")
+            # デバッグ出力を削減（パフォーマンス向上）
+            # print(f"DEBUG: 制約チェック - 制約数: {len(self.constraints)}, 連続スロット制約: {consecutive_break_constraint is not None}")
         
         # 既存の割り当てから、このスロットで既に割り当てられているオペレータを除外
         existing_slot_assignments = [a for a in existing_assignments if a.slot_id == slot_id]
@@ -207,7 +209,8 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
         # 連続スロット制約がある場合、休憩が必要なオペレータを特定
         required_break_operators = set()
         if consecutive_break_constraint:
-            print(f"DEBUG: 連続スロット制約チェック開始 - 最大連続スロット数: {consecutive_break_constraint.max_consecutive_slots}")
+            # デバッグ出力を削減（パフォーマンス向上）
+            # print(f"DEBUG: 連続スロット制約チェック開始 - 最大連続スロット数: {consecutive_break_constraint.max_consecutive_slots}")
             # 各オペレータの連続勤務状況をチェック
             for operator in operators:
                 if operator.operator_name in assigned_operators:
@@ -230,23 +233,24 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
                 
                 # 連続カウントを計算（休憩後のリセットを考慮）
                 consecutive_count = 0
-                print(f"DEBUG: {operator.operator_name} - 連続カウント計算開始（スロット{slot_id}）")
+                # デバッグ出力を削減（パフォーマンス向上）
+                # print(f"DEBUG: {operator.operator_name} - 連続カウント計算開始（スロット{slot_id}）")
                 for assignment in filtered_assignments:
                     if assignment.desk_name == consecutive_break_constraint.break_desk_name:
-                        print(f"  {assignment.slot_id}: 休憩（カウントリセット: {consecutive_count} → 0）")
+                        # print(f"  {assignment.slot_id}: 休憩（カウントリセット: {consecutive_count} → 0）")
                         consecutive_count = 0  # 休憩後は連続カウントをリセット
                     else:
                         consecutive_count += 1
-                        print(f"  {assignment.slot_id}: {assignment.desk_name}（連続{consecutive_count}スロット目）")
+                        # print(f"  {assignment.slot_id}: {assignment.desk_name}（連続{consecutive_count}スロット目）")
                 
-                print(f"DEBUG: {operator.operator_name} - 最終連続カウント: {consecutive_count}, 既存割り当て数: {len(filtered_assignments)}")
+                # print(f"DEBUG: {operator.operator_name} - 最終連続カウント: {consecutive_count}, 既存割り当て数: {len(filtered_assignments)}")
                 
                 # 連続スロット数が上限に達している場合、このスロットで休憩が必要
                 if consecutive_count >= consecutive_break_constraint.max_consecutive_slots:
                     required_break_operators.add(operator.operator_name)
-                    print(f"DEBUG: {operator.operator_name} - 休憩が必要（連続{consecutive_count}スロット）")
+                    # print(f"DEBUG: {operator.operator_name} - 休憩が必要（連続{consecutive_count}スロット）")
         
-        print(f"DEBUG: 休憩が必要なオペレータ: {required_break_operators}")
+        # print(f"DEBUG: 休憩が必要なオペレータ: {required_break_operators}")
         
         # 各デスクの要件を確認
         slot_requirements = []
@@ -276,7 +280,7 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
                 })
                 print(f"DEBUG: 休憩デスク要件追加 - {consecutive_break_constraint.break_desk_name}: 0人（休憩不要）")
         
-        print(f"DEBUG: スロット{slot_id}の要件: {slot_requirements}")
+        # print(f"DEBUG: スロット{slot_id}の要件: {slot_requirements}")
         
         # 各デスクの要件を処理（休憩デスクを最後に処理）
         assignments = []
@@ -360,7 +364,17 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
                         slot_id in operator.available_slots and
                         operator.operator_name in required_break_operators):
                         
+                        # デスク制約のチェック：オペレータがこのデスクで働けるかチェック
+                        if not operator.can_work_desk(desk_name):
+                            continue  # このデスクでは働けない場合はスキップ
+                        
                         available_operators.append(operator)
+                
+                # オペレータの優先度を考慮してソート
+                available_operators.sort(key=lambda op: (
+                    slot_id in op.preferred_slots,  # 好ましいスロットを優先
+                    op.operator_name  # 名前順で安定化
+                ), reverse=True)
                 
                 # 必要な人数分のオペレータを割り当て
                 for i in range(min(additional_needed, len(available_operators))):
@@ -373,6 +387,8 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
                     )
                     assignments.append(assignment)
                     assigned_operators.add(operator.operator_name)
+                    # print(f"DEBUG: {operator.operator_name} を休憩デスク {desk_name} に割り当て")
+        
         else:
             # 制約がない場合は通常の処理
             for req in slot_requirements:
@@ -455,7 +471,8 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
         Returns:
             最適化された割り当てリスト
         """
-        print(f"DEBUG: 要員不足解消プロセス開始 - スロット: {slot_id}")
+        # デバッグ出力を削減（パフォーマンス向上）
+        # print(f"DEBUG: 要員不足解消プロセス開始 - スロット: {slot_id}")
         
         # 連続スロット制約を取得
         consecutive_break_constraint = None
@@ -479,248 +496,64 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
                 'assignments': current_assignments
             }
         
-        print(f"DEBUG: デスク状況: {desk_status}")
-        
-        # アサインされていないオペレータを取得
-        assigned_operators = {a.operator_name for a in assignments if a.slot_id == slot_id}
-        unassigned_operators = [
-            op for op in operators 
-            if op.operator_name not in assigned_operators and op.can_work_slot(slot_id)
-        ]
-        
-        print(f"DEBUG: アサインされていないオペレータ: {[op.operator_name for op in unassigned_operators]}")
-        
-        # 連続スロット制約がある場合、休憩が必要なオペレータを特定
-        required_break_operators = set()
-        if consecutive_break_constraint:
-            for operator in operators:
-                if operator.operator_name in assigned_operators:
-                    continue  # 既に割り当て済み
-                
-                # このオペレータの既存割り当てを取得（現在のスロットより前のもののみ）
-                # スロットIDから時間を抽出して数値比較
-                current_hour = int(slot_id[1:]) if slot_id.startswith('h') else 9
-                op_assignments = [a for a in assignments 
-                                if a.operator_name == operator.operator_name]
-                
-                # 現在のスロットより前の割り当てのみをフィルタ
-                filtered_assignments = []
-                for assignment in op_assignments:
-                    assignment_hour = int(assignment.slot_id[1:]) if assignment.slot_id.startswith('h') else 9
-                    if assignment_hour < current_hour:
-                        filtered_assignments.append(assignment)
-                
-                filtered_assignments.sort(key=lambda x: (x.date, x.slot_id))
-                
-                # 連続カウントを計算（休憩後のリセットを考慮）
-                consecutive_count = 0
-                print(f"DEBUG: {operator.operator_name} - 連続カウント計算開始（スロット{slot_id}）")
-                for assignment in filtered_assignments:
-                    if assignment.desk_name == consecutive_break_constraint.break_desk_name:
-                        print(f"  {assignment.slot_id}: 休憩（カウントリセット: {consecutive_count} → 0）")
-                        consecutive_count = 0  # 休憩後は連続カウントをリセット
-                    else:
-                        consecutive_count += 1
-                        print(f"  {assignment.slot_id}: {assignment.desk_name}（連続{consecutive_count}スロット目）")
-                
-                print(f"DEBUG: {operator.operator_name} - 最終連続カウント: {consecutive_count}, 既存割り当て数: {len(filtered_assignments)}")
-                
-                # 連続スロット数が上限に達している場合、このスロットで休憩が必要
-                if consecutive_count >= consecutive_break_constraint.max_consecutive_slots:
-                    required_break_operators.add(operator.operator_name)
-        
-        print(f"DEBUG: 休憩が必要なオペレータ: {required_break_operators}")
-        
-        # ステップ1: アサインされていないオペレータを不足デスクに割り当て
-        for operator in unassigned_operators:
-            # このオペレータが対応可能で、かつ要員不足のデスクを探す
-            for desk_name, status in desk_status.items():
-                if status['shortage'] <= 0:
-                    continue  # 要員不足でない場合はスキップ
-                
-                if not operator.can_work_desk(desk_name):
-                    continue  # 対応可能でないデスクはスキップ
-                
-                # 連続スロット制約のチェック
-                if consecutive_break_constraint:
-                    # このオペレータが休憩が必要な場合
-                    if operator.operator_name in required_break_operators:
-                        # 休憩デスクにのみ割り当て可能
-                        if desk_name != consecutive_break_constraint.break_desk_name:
-                            continue
-                    else:
-                        # 通常のデスクにのみ割り当て可能（休憩デスクは除外）
-                        if desk_name == consecutive_break_constraint.break_desk_name:
-                            continue
-                
-                # 新しい割り当てを作成
-                new_assignment = Assignment(
-                    operator_name=operator.operator_name,
-                    desk_name=desk_name,
-                    slot_id=slot_id,
-                    date=target_date
-                )
-                assignments.append(new_assignment)
-                
-                # 状況を更新
-                desk_status[desk_name]['current'] += 1
-                desk_status[desk_name]['shortage'] -= 1
-                desk_status[desk_name]['assignments'].append(new_assignment)
-                
-                print(f"DEBUG: {operator.operator_name} を {desk_name} に再アサイン（要員不足解消）")
-                break
-        
-        # ステップ1-2: 要員満たされているデスクからの最適化
-        # アサインされていないオペレータがまだ残っている場合
-        remaining_unassigned = [
-            op for op in unassigned_operators 
-            if op.operator_name not in {a.operator_name for a in assignments if a.slot_id == slot_id}
-        ]
-        
-        if remaining_unassigned:
-            print(f"DEBUG: ステップ1-2開始 - 残りのアサインされていないオペレータ: {[op.operator_name for op in remaining_unassigned]}")
-            
-            for operator in remaining_unassigned:
-                # このオペレータが対応可能なデスクを探す
-                for desk_name, status in desk_status.items():
-                    if not operator.can_work_desk(desk_name):
-                        continue  # 対応可能でないデスクはスキップ
-                    
-                    # 連続スロット制約のチェック
-                    if consecutive_break_constraint:
-                        # このオペレータが休憩が必要な場合
-                        if operator.operator_name in required_break_operators:
-                            # 休憩デスクにのみ割り当て可能
-                            if desk_name != consecutive_break_constraint.break_desk_name:
-                                continue
-                        else:
-                            # 通常のデスクにのみ割り当て可能
-                            if desk_name == consecutive_break_constraint.break_desk_name:
-                                continue
-                    
-                    # このデスクの現在の割り当てを確認
-                    current_assignments = status['assignments']
-                    
-                    # このデスクから移動可能なオペレータを探す
-                    for current_assignment in current_assignments[:]:  # コピーでイテレート
-                        current_operator_name = current_assignment.operator_name
-                        current_operator = next((op for op in operators if op.operator_name == current_operator_name), None)
-                        
-                        if not current_operator:
-                            continue
-                        
-                        # このオペレータが他の不足デスクに移動可能かチェック
-                        for other_desk_name, other_status in desk_status.items():
-                            if other_desk_name == desk_name:
-                                continue  # 同じデスクはスキップ
-                            
-                            if other_status['shortage'] <= 0:
-                                continue  # 要員不足でないデスクはスキップ
-                            
-                            if not current_operator.can_work_desk(other_desk_name):
-                                continue  # 対応可能でないデスクはスキップ
-                            
-                            # 連続スロット制約のチェック
-                            if consecutive_break_constraint:
-                                # このオペレータが休憩が必要な場合
-                                if current_operator_name in required_break_operators:
-                                    # 休憩デスクにのみ移動可能
-                                    if other_desk_name != consecutive_break_constraint.break_desk_name:
-                                        continue
-                                else:
-                                    # 通常のデスクにのみ移動可能
-                                    if other_desk_name == consecutive_break_constraint.break_desk_name:
-                                        continue
-                            
-                            # 移動を実行
-                            # 1. 現在のデスクからオペレータを削除
-                            current_assignment.desk_name = other_desk_name
-                            
-                            # 状況を更新
-                            # 元のデスクの状況を更新
-                            desk_status[desk_name]['current'] -= 1
-                            desk_status[desk_name]['assignments'].remove(current_assignment)
-                            
-                            # 新しいデスクの状況を更新
-                            desk_status[other_desk_name]['current'] += 1
-                            desk_status[other_desk_name]['shortage'] -= 1
-                            desk_status[other_desk_name]['assignments'].append(current_assignment)
-                            
-                            print(f"DEBUG: {current_operator_name} を {desk_name} から {other_desk_name} に移動（要員不足解消のため）")
-                            
-                            # 2. アサインされていないオペレータを空いたデスクに割り当て
-                            new_assignment = Assignment(
-                                operator_name=operator.operator_name,
-                                desk_name=desk_name,
-                                slot_id=slot_id,
-                                date=target_date
-                            )
-                            assignments.append(new_assignment)
-                            
-                            # 状況を更新
-                            desk_status[desk_name]['current'] += 1
-                            desk_status[desk_name]['assignments'].append(new_assignment)
-                            
-                            print(f"DEBUG: {operator.operator_name} を {desk_name} にアサイン（移動後の空き枠）")
-                            
-                            # このオペレータの処理は完了
-                            break
-                        
-                        # 移動が実行された場合は、このデスクの処理は完了
-                        if current_assignment.desk_name != desk_name:
-                            break
-                    
-                    # 移動が実行された場合は、このオペレータの処理は完了
-                    if any(a.desk_name != desk_name for a in current_assignments if a.operator_name == operator.operator_name):
-                        break
-        
-        # ステップ2: 余剰デスクから不足デスクへの移動
-        # 余剰があるデスクを特定
-        surplus_desks = [(desk_name, status) for desk_name, status in desk_status.items() 
-                         if status['surplus'] > 0]
-        
-        # 不足しているデスクを特定
-        shortage_desks = [(desk_name, status) for desk_name, status in desk_status.items() 
-                          if status['shortage'] > 0]
-        
-        print(f"DEBUG: 余剰デスク: {[d[0] for d in surplus_desks]}")
-        print(f"DEBUG: 不足デスク: {[d[0] for d in shortage_desks]}")
+        # 不足デスクと余剰デスクを特定
+        shortage_desks = [(desk, status['shortage']) for desk, status in desk_status.items() 
+                         if status['shortage'] > 0]
+        surplus_desks = [(desk, status['surplus']) for desk, status in desk_status.items() 
+                        if status['surplus'] > 0]
         
         # 余剰デスクから不足デスクへの移動を試行
-        for surplus_desk_name, surplus_status in surplus_desks:
+        for surplus_desk_name, surplus_count in surplus_desks:
             if not shortage_desks:
                 break  # 不足デスクがなくなったら終了
             
             # この余剰デスクの割り当てを取得
-            surplus_assignments = surplus_status['assignments']
+            surplus_assignments = desk_status[surplus_desk_name]['assignments'].copy()
             
-            for assignment in surplus_assignments[:]:  # コピーでイテレート
+            for assignment in surplus_assignments:
                 if not shortage_desks:
-                    break
+                    break  # 不足デスクがなくなったら終了
                 
                 operator_name = assignment.operator_name
-                operator = next((op for op in operators if op.operator_name == operator_name), None)
-                
-                if not operator:
-                    continue
                 
                 # このオペレータが移動可能な不足デスクを探す
-                for shortage_desk_name, shortage_status in shortage_desks[:]:  # コピーでイテレート
-                    if shortage_status['shortage'] <= 0:
-                        continue  # 要員不足でない場合はスキップ
-                    
-                    if not operator.can_work_desk(shortage_desk_name):
-                        continue  # 対応可能でないデスクはスキップ
-                    
-                    # 連続スロット制約のチェック
+                for shortage_desk_name, shortage_count in shortage_desks:
+                    # 連続スロット制約がある場合の制限
                     if consecutive_break_constraint:
-                        # このオペレータが休憩が必要な場合
-                        if operator.operator_name in required_break_operators:
-                            # 休憩デスクにのみ移動可能
+                        # オペレータの現在の状況をチェック
+                        operator_assignments = [a for a in assignments 
+                                              if a.operator_name == operator_name and a.slot_id == slot_id]
+                        
+                        # 連続スロット制約のチェック
+                        # このオペレータの既存割り当てを取得（現在のスロットより前のもののみ）
+                        current_hour = int(slot_id[1:]) if slot_id.startswith('h') else 9
+                        op_assignments = [a for a in assignments 
+                                        if a.operator_name == operator_name]
+                        
+                        # 現在のスロットより前の割り当てのみをフィルタ
+                        filtered_assignments = []
+                        for assignment in op_assignments:
+                            assignment_hour = int(assignment.slot_id[1:]) if assignment.slot_id.startswith('h') else 9
+                            if assignment_hour < current_hour:
+                                filtered_assignments.append(assignment)
+                        
+                        filtered_assignments.sort(key=lambda x: (x.date, x.slot_id))
+                        
+                        # 連続カウントを計算（休憩後のリセットを考慮）
+                        consecutive_count = 0
+                        for assignment in filtered_assignments:
+                            if assignment.desk_name == consecutive_break_constraint.break_desk_name:
+                                consecutive_count = 0  # 休憩後は連続カウントをリセット
+                            else:
+                                consecutive_count += 1
+                        
+                        # 連続スロット数が上限に達している場合、このスロットで休憩が必要
+                        if consecutive_count >= consecutive_break_constraint.max_consecutive_slots:
+                            # 休憩が必要なオペレータは休憩デスクにのみ移動可能
                             if shortage_desk_name != consecutive_break_constraint.break_desk_name:
                                 continue
                         else:
-                            # 通常のデスクにのみ移動可能（休憩デスクは除外）
+                            # 通常のオペレータは休憩デスク以外にのみ移動可能
                             if shortage_desk_name == consecutive_break_constraint.break_desk_name:
                                 continue
                     
@@ -738,7 +571,8 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
                     desk_status[shortage_desk_name]['shortage'] -= 1
                     desk_status[shortage_desk_name]['assignments'].append(assignment)
                     
-                    print(f"DEBUG: {operator_name} を {surplus_desk_name} から {shortage_desk_name} に移動")
+                    # デバッグ出力を削減（パフォーマンス向上）
+                    # print(f"DEBUG: {operator_name} を {surplus_desk_name} から {shortage_desk_name} に移動")
                     
                     # 不足デスクの状況を再チェック
                     if desk_status[shortage_desk_name]['shortage'] <= 0:
@@ -756,7 +590,8 @@ class ConstrainedMultiSlotDAMatchingAlgorithm:
                 'shortage': status['shortage']
             }
         
-        print(f"DEBUG: 最適化後のデスク状況: {final_status}")
+        # デバッグ出力を削減（パフォーマンス向上）
+        # print(f"DEBUG: 最適化後のデスク状況: {final_status}")
         
         return assignments
 
@@ -806,7 +641,8 @@ def constrained_multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_op
     if target_date is None:
         target_date = datetime.now()
     
-    print(f"DEBUG: マッチング開始 - オペレータ数: {len(legacy_ops)}, 制約数: {len(constraints) if constraints else 0}")
+    # デバッグ出力を削減（パフォーマンス向上）
+    # print(f"DEBUG: マッチング開始 - オペレータ数: {len(legacy_ops)}, 制約数: {len(constraints) if constraints else 0}")
     
     # デフォルトスロットを作成
     slots = create_default_slots()
@@ -827,11 +663,11 @@ def constrained_multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_op
     algorithm = ConstrainedMultiSlotDAMatchingAlgorithm(slots, desks, constraints)
     
     # 1日分のマッチングを実行
-    print("DEBUG: スロット別マッチング開始...")
+    # print("DEBUG: スロット別マッチング開始...")
     assignments = algorithm.match_daily(operators, desk_requirements, target_date)
     
     slot_time = time.time()
-    print(f"DEBUG: スロット別マッチング完了 - 時間: {slot_time - start_time:.2f}秒")
+    # print(f"DEBUG: スロット別マッチング完了 - 時間: {slot_time - start_time:.2f}秒")
     
     # 休憩時間制約がある場合、休憩割り当てを追加
     if constraints:
@@ -840,9 +676,9 @@ def constrained_multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_op
         if consecutive_break_constraint:
             break_assignments = consecutive_break_constraint.get_required_break_assignments(assignments, operators)
             # 休憩割り当てを既存の割り当てに追加
-            print(f"DEBUG: 連続スロット後の休憩割り当て数: {len(break_assignments)}")
+            # print(f"DEBUG: 連続スロット後の休憩割り当て数: {len(break_assignments)}")
             for break_assignment in break_assignments:
-                print(f"DEBUG: 休憩割り当て: {break_assignment}")
+                # print(f"DEBUG: 休憩割り当て: {break_assignment}")
                 # 休憩割り当てをAssignmentオブジェクトとして追加
                 from models.multi_slot_models import Assignment
                 break_assignment_obj = Assignment(
@@ -857,16 +693,17 @@ def constrained_multi_slot_da_match(hourly_requirements: pd.DataFrame, legacy_op
         break_constraint = next((c for c in constraints if isinstance(c, RequiredBreakAfterLongShiftConstraint)), None)
         if break_constraint:
             break_assignments = break_constraint.get_break_assignments(assignments, operators)
-            print(f"DEBUG: 長時間シフト後の休憩割り当て数: {len(break_assignments)}")
+            # print(f"DEBUG: 長時間シフト後の休憩割り当て数: {len(break_assignments)}")
             for break_assignment in break_assignments:
-                print(f"DEBUG: 休憩割り当て: {break_assignment}")
+                # print(f"DEBUG: 休憩割り当て: {break_assignment}")
+                pass
     
     # 割り当て結果をDataFrameに変換
-    print("DEBUG: DataFrame変換開始...")
+    # print("DEBUG: DataFrame変換開始...")
     schedule = convert_assignments_to_dataframe(assignments, slots, desks, target_date)
     
     end_time = time.time()
-    print(f"DEBUG: マッチング完了 - 総時間: {end_time - start_time:.2f}秒, 割り当て数: {len(assignments)}")
+    # print(f"DEBUG: マッチング完了 - 総時間: {end_time - start_time:.2f}秒, 割り当て数: {len(assignments)}")
     
     # キャッシュをクリア（メモリ使用量削減）
     if algorithm.constraint_validator:
